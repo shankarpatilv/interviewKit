@@ -104,6 +104,7 @@ src/interviewkit/
   config.py     Pydantic settings
 
 companies/      company principles and interview rubrics
+examples/       public templates for user-owned private files
 evals/          manual quality evaluation data
 tests/          pytest test suite
 ```

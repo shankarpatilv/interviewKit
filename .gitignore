@@ -1,16 +1,16 @@
 # Codex and planning workspace
-AGENTS.md
-docs/
-memories/
-tasks/
-PROJECT.md
-project.md
-CHANGELOG.md
-changelog.md
+/AGENTS.md
+/docs/
+/memories/
+/tasks/
+/PROJECT.md
+/project.md
+/CHANGELOG.md
+/changelog.md
 
 # Private user data
-experiences/
-sessions/
+/experiences/
+/sessions/
 .env
 .env.*
 
