@@ -31,3 +31,20 @@ SCHEMA_STATEMENTS = (
     CREATE_EXPERIENCES_EMBEDDING_INDEX_SQL,
     CREATE_EXPERIENCES_SOURCE_INDEX_SQL,
 )
+
+UPSERT_CHUNK_SQL = """
+INSERT INTO experiences (id, source_file, chunk_text, chunk_meta, embedding)
+VALUES (%s, %s, %s, %s::jsonb, %s::vector)
+ON CONFLICT (id) DO UPDATE SET
+    source_file = EXCLUDED.source_file,
+    chunk_text = EXCLUDED.chunk_text,
+    chunk_meta = EXCLUDED.chunk_meta,
+    embedding = EXCLUDED.embedding
+"""
+
+SIMILARITY_SEARCH_SQL = """
+SELECT source_file, chunk_text, chunk_meta, 1 - (embedding <=> %s::vector) AS similarity
+FROM experiences
+ORDER BY (embedding <=> %s::vector) + 0
+LIMIT %s
+"""
