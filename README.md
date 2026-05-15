@@ -1,5 +1,7 @@
 # InterviewKit
 
+![CLI](https://img.shields.io/badge/CLI-Typer-green) ![LangChain](https://img.shields.io/badge/RAG-LangChain-orange) ![LangGraph](https://img.shields.io/badge/Workflow-LangGraph-purple) ![OpenAI](https://img.shields.io/badge/LLM-OpenAI-black) ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-pgvector-blue)
+
 InterviewKit is a local CLI for the part of interview prep that is easy to
 avoid until it suddenly matters: turning your own messy work history into
 clear, company-specific behavioral stories.
@@ -95,19 +97,19 @@ career details should stay private.
 
 ## Tech Stack
 
-| Layer | Technology |
-| --- | --- |
-| Language | Python 3.11+ |
-| CLI | Typer |
-| Document and retrieval plumbing | LangChain |
-| Workflow orchestration | LangGraph |
-| LLM provider | OpenAI behind a provider abstraction |
-| Optional provider adapter | Claude wrapper |
-| Embeddings | OpenAI `text-embedding-3-small` |
-| Vector database | PostgreSQL 15 with pgvector |
-| Configuration | Pydantic Settings |
-| Testing | pytest, Ruff, mypy, Black |
-| Local services | Docker Compose |
+| Layer                           | Technology                           |
+| ------------------------------- | ------------------------------------ |
+| Language                        | Python 3.11+                         |
+| CLI                             | Typer                                |
+| Document and retrieval plumbing | LangChain                            |
+| Workflow orchestration          | LangGraph                            |
+| LLM provider                    | OpenAI behind a provider abstraction |
+| Optional provider adapter       | Claude wrapper                       |
+| Embeddings                      | OpenAI `text-embedding-3-small`      |
+| Vector database                 | PostgreSQL 15 with pgvector          |
+| Configuration                   | Pydantic Settings                    |
+| Testing                         | pytest, Ruff, mypy, Black            |
+| Local services                  | Docker Compose                       |
 
 ## Example Workflow
 
