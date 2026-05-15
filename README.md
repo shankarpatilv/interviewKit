@@ -1,58 +1,97 @@
 # InterviewKit
 
-InterviewKit is a local AI interview-prep CLI that turns a candidate's own experience notes into company-specific behavioral interview practice.
+InterviewKit is a local CLI for the part of interview prep that is easy to
+avoid until it suddenly matters: turning your own messy work history into
+clear, company-specific behavioral stories.
 
-It reads markdown experience documents, indexes them with embeddings, retrieves the most relevant stories for a target role, and generates tailored interview questions plus STAR-format draft answers with citations back to the source experiences. It is designed for candidates preparing across multiple interview loops where each company has its own values, competencies, and expectations.
+You write markdown notes about real projects you have worked on. InterviewKit
+indexes those notes with OpenAI embeddings, stores them in PostgreSQL with
+pgvector, retrieves the stories that match a role, and drafts behavioral
+questions and STAR answers with citations back to the source files.
 
 ## What It Does
 
-- Generates likely behavioral interview questions from a job description and company principles.
-- Synthesizes STAR-format draft answers from the candidate's own experience corpus.
-- Cites the experience documents used for each answer so drafts stay grounded.
-- Tracks which stories have already been used for a company or interview round.
-- Supports live mock interview flows for multi-turn practice and feedback.
-- Runs locally as a CLI so private experience documents stay on the user's machine.
+- Loads private markdown experience notes from a local `experiences/` folder.
+- Splits experience documents into retrieval-friendly chunks while preserving
+  source-file and markdown-header metadata.
+- Generates OpenAI `text-embedding-3-small` embeddings for experience chunks.
+- Stores embedded chunks in PostgreSQL 15 with pgvector for semantic search.
+- Generates 5 to 8 company-specific behavioral interview questions from a job
+  description and company principles.
+- Retrieves relevant experience chunks for each question.
+- Drafts STAR-format answers using only retrieved experience context.
+- Cites the source experience file used for each generated answer.
+- Writes prep output to both the terminal and a markdown session file.
 
 ## Why It Exists
 
-Behavioral interview prep is repetitive but high-stakes. Candidates often spend hours mapping the same set of projects, conflicts, tradeoffs, and wins to different company rubrics: Amazon Leadership Principles, Microsoft competencies, startup founder values, or role-specific expectations.
+Behavioral prep is weirdly painful. You usually have the stories, but they are
+scattered across memory, notes, brag docs, tickets, and half-remembered
+projects. Then every company asks for the same raw material through a different
+lens: Amazon Leadership Principles, Microsoft competencies, startup values,
+role-specific expectations.
 
-InterviewKit makes that workflow faster and more systematic. The candidate writes rich experience notes once, then reuses them through retrieval-augmented generation to prepare for each company with better coverage and less manual rewriting.
+InterviewKit makes that process less ad hoc. Write the experience notes once,
+then reuse them. The tool finds the relevant parts, drafts questions you are
+likely to hear, and turns the right stories into cited STAR answers.
 
 ## How It Works
 
 ```text
 experience markdown
-    -> LangChain loading and chunking
+    -> LangChain loading and markdown-aware chunking
     -> OpenAI embeddings
-    -> PostgreSQL + pgvector
-    -> LangGraph interview-prep workflow
-    -> tailored questions, cited STAR answers, and session output
+    -> PostgreSQL + pgvector storage
+    -> LangChain semantic retrieval
+    -> LangGraph question and answer workflows
+    -> cited interview-prep markdown output
 ```
 
-The experience corpus is the core of the system. Each document captures the context, role, decisions, tradeoffs, metrics, conflict, and lessons from a real project or work experience. InterviewKit retrieves relevant chunks from that corpus and uses them to draft answers for the target company and role.
+The experience notes are the important part. Each file should describe a real
+project: what happened, what you owned, what decisions you made, what broke,
+what tradeoffs mattered, and what changed because of the work. InterviewKit
+does not try to invent a better career for you. It searches those notes and
+uses the matching chunks as evidence.
 
 ## Core Features
 
 ### Experience Ingestion
 
-InterviewKit loads markdown files from an experience directory, splits them into retrieval-friendly chunks, embeds them, and stores them in PostgreSQL with pgvector.
+`interviewkit ingest` reads markdown files from `experiences/`, skips
+templates, splits the useful text into chunks, embeds those chunks with
+OpenAI, and upserts them into the local pgvector table.
 
-### Company-Aware Prep
+### Company-Aware Questions
 
-Given a job description and a company profile, InterviewKit identifies likely behavioral themes and maps them to relevant experience stories.
+`interviewkit prep` reads a job description and a company profile from
+`companies/`, then generates likely behavioral questions tagged with the
+principle or competency they are testing.
 
-### STAR Answer Drafting
+### Retrieval-Grounded STAR Answers
 
-Generated answers follow the STAR structure: Situation, Task, Action, Result. The answers are grounded in retrieved experience chunks and include citations so users can trace each answer back to source notes.
+For each generated question, InterviewKit searches pgvector for relevant
+experience chunks and drafts an answer in STAR format: Situation, Task, Action,
+Result, and Sources.
 
-### Story Usage Tracking
+If the retrieved context is not good enough, it says so instead of making up a
+story. That is deliberate. A confident fake answer is worse than no answer.
 
-InterviewKit records which stories were used for which companies and rounds. This helps avoid repeating the same story too often in follow-up interviews.
+### Source Citations
 
-### Mock Interview Practice
+Generated answers cite source files in this format:
 
-The mock interview flow uses a multi-turn LangGraph workflow to play the role of an interviewer, ask follow-up questions, and produce feedback after the session.
+```text
+(source: amazon-bedrock-pipeline.md)
+```
+
+This keeps the generated prep tied to actual notes instead of floating around
+as generic AI advice.
+
+### Local Templates
+
+The repository includes public templates for company profiles and experience
+documents. Filled-in personal experience files are ignored by Git. Your private
+career details should stay private.
 
 ## Tech Stack
 
@@ -60,66 +99,72 @@ The mock interview flow uses a multi-turn LangGraph workflow to play the role of
 | --- | --- |
 | Language | Python 3.11+ |
 | CLI | Typer |
-| RAG pipeline | LangChain |
-| Agent orchestration | LangGraph |
-| LLM providers | Anthropic Claude and OpenAI |
+| Document and retrieval plumbing | LangChain |
+| Workflow orchestration | LangGraph |
+| LLM provider | OpenAI behind a provider abstraction |
+| Optional provider adapter | Claude wrapper |
 | Embeddings | OpenAI `text-embedding-3-small` |
 | Vector database | PostgreSQL 15 with pgvector |
 | Configuration | Pydantic Settings |
-| Testing | pytest |
+| Testing | pytest, Ruff, mypy, Black |
 | Local services | Docker Compose |
 
 ## Example Workflow
 
 ```bash
 # Install locally
-pip install -e .
+python -m pip install -e '.[dev]'
 
 # Start PostgreSQL with pgvector
 docker compose up -d
 
-# Index experience documents
+# Initialize the database schema
+python -m interviewkit init-db
+
+# Index private experience documents
 python -m interviewkit ingest
 
-# Generate interview prep for a role
+# Generate prep for a role and company
 python -m interviewkit prep --jd path/to/job-description.txt --company amazon
-
-# Log a story after using it in an interview
-python -m interviewkit log --company amazon --story bedrock-pipeline
-
-# Run a mock interview
-python -m interviewkit mock --jd path/to/job-description.txt --company amazon
 ```
+
+Session output is written under `sessions/`, which is ignored by Git.
 
 ## Repository Layout
 
 ```text
 src/interviewkit/
-  agent/        LangGraph workflows for prep, story tracking, and mock interviews
+  agent/        LangGraph workflows for question and answer generation
   ingest/       markdown loading, chunking, and embedding
-  providers/    Anthropic and OpenAI provider adapters
-  retrieval/    pgvector storage and retrieval
+  providers/    OpenAI-first provider abstraction and optional Claude adapter
+  retrieval/    PostgreSQL/pgvector schema, storage, search, and retriever
   prompts/      prompt templates loaded at runtime
   cli.py        Typer command entry point
   config.py     Pydantic settings
 
 companies/      company principles and interview rubrics
-examples/       public templates for user-owned private files
-evals/          manual quality evaluation data
+examples/       public examples and templates
+experiences/    local private experience notes, ignored by Git
+resources/      local usage and checkpoint notes
+sessions/       generated prep outputs, ignored by Git
 tests/          pytest test suite
 ```
-
-Private experience documents and generated sessions are intentionally kept out of Git.
 
 ## Design Principles
 
 - Keep private career details local.
-- Ground generated answers in cited experience notes.
-- Use explicit LangGraph workflows instead of opaque agent loops.
-- Keep CLI commands thin and business logic in library modules.
-- Prefer simple, typed Python over framework-heavy magic.
-- Treat automated scoring as future work; answer quality should be reviewed by the user.
+- Ground answers in retrieved notes, not vibes.
+- Preserve `source_file` metadata all the way to the final citation.
+- Use explicit LangGraph workflows instead of loose autonomous agent loops.
+- Keep CLI commands thin; put real behavior in library code.
+- Prefer boring, typed Python over clever framework magic.
+- Test LLM and retrieval behavior with fake providers where possible.
 
 ## Status
 
-InterviewKit is designed as a complete local AI interview-prep system for behavioral interviews. The public repository is structured to show the product architecture, setup flow, and intended user experience while keeping personal experience data private.
+InterviewKit provides a local workflow for behavioral interview prep: ingest
+private experience notes, generate company-specific questions, retrieve
+relevant stories, draft STAR answers, and cite source files.
+
+Story reuse tracking, multi-turn mock interviews, richer evaluation, and answer
+quality scoring are planned extensions beyond this core CLI workflow.
