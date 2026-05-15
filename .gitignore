@@ -11,6 +11,7 @@
 # Private user data
 /experiences/
 /sessions/
+/scripts/
 .env
 .env.*
 !.env.example
