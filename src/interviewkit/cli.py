@@ -1,11 +1,14 @@
 """Command-line interface for InterviewKit."""
 
+import asyncio
 from pathlib import Path
 
 import typer
 
+from interviewkit.agent.prep import PrepError, run_prep
 from interviewkit import __version__
 from interviewkit.config import Settings
+from interviewkit.ingest.pipeline import ingest_experiences
 from interviewkit.retrieval.vectorstore import init_db
 
 app = typer.Typer(
@@ -49,7 +52,8 @@ def ingest(
 ) -> None:
     """Index experience documents for retrieval."""
     settings = Settings(experiences_dir=experiences_dir)
-    typer.echo(f"Experience ingestion is not implemented yet: {settings.experiences_dir}")
+    indexed_count = asyncio.run(ingest_experiences(app_settings=settings))
+    typer.echo(f"Indexed {indexed_count} experience chunks.")
 
 
 @app.command()
@@ -58,7 +62,13 @@ def prep(
     company: str = typer.Option(..., "--company", help="Company profile name."),
 ) -> None:
     """Generate company-specific interview prep."""
-    typer.echo(f"Interview prep is not implemented yet: jd={jd}, company={company}")
+    try:
+        result = asyncio.run(run_prep(jd, company))
+    except PrepError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    typer.echo(result.markdown)
+    typer.echo(f"Session written to {result.session_path}")
 
 
 @app.command()
