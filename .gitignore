@@ -9,7 +9,10 @@
 /changelog.md
 
 # Private user data
-/experiences/
+/experiences/*
+!/experiences/
+!/experiences/_template.md
+!/experiences/README.md
 /sessions/
 /scripts/
 .env
