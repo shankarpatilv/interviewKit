@@ -6,6 +6,7 @@ import typer
 
 from interviewkit import __version__
 from interviewkit.config import Settings
+from interviewkit.retrieval.vectorstore import init_db
 
 app = typer.Typer(
     help="Prepare company-specific behavioral interviews from your experience notes.",
@@ -29,6 +30,13 @@ def main(
     ),
 ) -> None:
     """Run the InterviewKit CLI."""
+
+
+@app.command("init-db")
+def init_db_command() -> None:
+    """Initialize the local PostgreSQL schema."""
+    init_db()
+    typer.echo("Database schema initialized.")
 
 
 @app.command()
