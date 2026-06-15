@@ -7,7 +7,10 @@ from interviewkit.config import Settings
 def test_settings_defaults_match_project_configuration() -> None:
     settings = Settings(_env_file=None)
 
-    assert settings.database_url == "postgresql://interviewkit:interviewkit@localhost:5432/interviewkit"
+    assert (
+        settings.database_url
+        == "postgresql://interviewkit:interviewkit@localhost:5432/interviewkit"
+    )
     assert settings.default_provider == "claude"
     assert settings.embedding_model == "text-embedding-3-small"
     assert settings.chunk_size == 800

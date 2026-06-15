@@ -4,11 +4,13 @@ from interviewkit.ingest.loader import load_experience_documents
 
 
 def test_load_experience_documents_returns_non_template_markdown_files(tmp_path) -> None:
-    (tmp_path / "amazon.md").write_text("# Amazon\n\nBuilt a moderation pipeline.", encoding="utf-8")
+    (tmp_path / "amazon.md").write_text(
+        "# Amazon\n\nBuilt a moderation pipeline.", encoding="utf-8"
+    )
     (tmp_path / "_template.md").write_text("# Template\n\nIgnore me.", encoding="utf-8")
 
     documents = load_experience_documents(tmp_path)
-    
+
     assert len(documents) == 1
     assert documents[0].page_content == "# Amazon\n\nBuilt a moderation pipeline."
     assert documents[0].metadata["source_file"] == "amazon.md"
