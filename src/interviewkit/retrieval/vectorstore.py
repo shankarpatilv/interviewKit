@@ -1,64 +1,17 @@
-"""PostgreSQL and pgvector initialization helpers."""
-
-from collections.abc import Callable
-from importlib import import_module
-from typing import Protocol, cast
+"""PostgreSQL and pgvector storage helpers."""
 
 from interviewkit.config import Settings, get_settings
-from interviewkit.retrieval.schema import SCHEMA_STATEMENTS
-
-
-class CursorLike(Protocol):
-    """Small cursor protocol used by the initializer and tests."""
-
-    def execute(self, query: str) -> object:
-        """Execute one SQL statement."""
-
-    def __enter__(self) -> "CursorLike":
-        """Enter the cursor context manager."""
-
-    def __exit__(self, exc_type: object, exc_value: object, traceback: object) -> None:
-        """Exit the cursor context manager."""
-
-
-class ConnectionLike(Protocol):
-    """Small connection protocol shared by psycopg and psycopg2."""
-
-    def cursor(self) -> CursorLike:
-        """Return a database cursor."""
-
-    def commit(self) -> None:
-        """Commit the active transaction."""
-
-    def rollback(self) -> None:
-        """Roll back the active transaction."""
-
-    def close(self) -> None:
-        """Close the database connection."""
-
-
-ConnectFactory = Callable[[str], ConnectionLike]
-
-
-def _default_connect(database_url: str) -> ConnectionLike:
-    try:
-        psycopg = import_module("psycopg")
-    except ImportError:
-        try:
-            psycopg = import_module("psycopg2")
-        except ImportError as exc:
-            msg = (
-                "A PostgreSQL driver is required to initialize the database. "
-                "Install psycopg or psycopg2, then retry."
-            )
-            raise RuntimeError(msg) from exc
-
-    return cast(ConnectionLike, psycopg.connect(database_url))
+from interviewkit.ingest.embedder import EmbeddedDocument
+from interviewkit.retrieval.connection import ConnectFactory, default_connect
+from interviewkit.retrieval.models import RetrievedDocument
+from interviewkit.retrieval.records import chunk_params, numbered_chunks, row_to_retrieved_document
+from interviewkit.retrieval.records import vector_literal
+from interviewkit.retrieval.schema import SCHEMA_STATEMENTS, SIMILARITY_SEARCH_SQL, UPSERT_CHUNK_SQL
 
 
 def init_db(
     app_settings: Settings | None = None,
-    connect: ConnectFactory = _default_connect,
+    connect: ConnectFactory = default_connect,
 ) -> None:
     """Create the pgvector extension, experiences table, and indexes."""
     resolved_settings = app_settings or get_settings()
@@ -69,6 +22,57 @@ def init_db(
             for statement in SCHEMA_STATEMENTS:
                 cursor.execute(statement)
         connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
+
+
+def upsert_chunks(
+    chunks: list[EmbeddedDocument],
+    app_settings: Settings | None = None,
+    connect: ConnectFactory = default_connect,
+) -> None:
+    """Insert or update embedded chunks in pgvector storage."""
+    resolved_settings = app_settings or get_settings()
+    connection = connect(resolved_settings.database_url)
+
+    try:
+        with connection.cursor() as cursor:
+            for chunk_id, chunk in numbered_chunks(chunks):
+                cursor.execute(
+                    UPSERT_CHUNK_SQL,
+                    chunk_params(chunk_id, chunk),
+                )
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
+
+
+def similarity_search(
+    query_embedding: list[float],
+    *,
+    k: int = 5,
+    app_settings: Settings | None = None,
+    connect: ConnectFactory = default_connect,
+) -> list[RetrievedDocument]:
+    """Return the top-k chunks closest to a query embedding."""
+    resolved_settings = app_settings or get_settings()
+    connection = connect(resolved_settings.database_url)
+
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                SIMILARITY_SEARCH_SQL,
+                (vector_literal(query_embedding), vector_literal(query_embedding), k),
+            )
+            rows = cursor.fetchall()
+        connection.commit()
+        return [row_to_retrieved_document(row) for row in rows]
     except Exception:
         connection.rollback()
         raise
