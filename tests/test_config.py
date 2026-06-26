@@ -11,7 +11,7 @@ def test_settings_defaults_match_project_configuration() -> None:
         settings.database_url
         == "postgresql://interviewkit:interviewkit@localhost:5432/interviewkit"
     )
-    assert settings.default_provider == "claude"
+    assert settings.default_provider == "openai"
     assert settings.embedding_model == "text-embedding-3-small"
     assert settings.chunk_size == 800
     assert settings.chunk_overlap == 100
@@ -56,9 +56,9 @@ def test_chunk_overlap_must_be_smaller_than_chunk_size() -> None:
 
 
 def test_missing_selected_provider_key_raises_clear_error() -> None:
-    settings = Settings(default_provider="claude", _env_file=None)
+    settings = Settings(default_provider="openai", _env_file=None)
 
-    with pytest.raises(ValueError, match="ANTHROPIC_API_KEY is required"):
+    with pytest.raises(ValueError, match="OPENAI_API_KEY is required"):
         settings.provider_api_key()
 
 

@@ -28,7 +28,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("DATABASE_URL", "INTERVIEWKIT_DATABASE_URL"),
     )
     default_provider: ProviderName = Field(
-        default="claude",
+        default="openai",
         validation_alias=AliasChoices("DEFAULT_PROVIDER", "INTERVIEWKIT_DEFAULT_PROVIDER"),
     )
     embedding_model: str = Field(
