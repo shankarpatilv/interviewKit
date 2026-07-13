@@ -1,3 +1,5 @@
+from typing import Any
+
 import pytest
 from typer.testing import CliRunner
 
@@ -15,13 +17,44 @@ def test_version_option_shows_package_version() -> None:
     assert f"interviewkit {__version__}" in result.stdout
 
 
-def test_prep_placeholder_accepts_required_options() -> None:
+def test_ingest_command_runs_pipeline(monkeypatch: pytest.MonkeyPatch) -> None:
     runner = CliRunner()
+    seen_dirs: list[str] = []
+
+    async def fake_ingest_experiences(app_settings: Any) -> int:
+        seen_dirs.append(str(app_settings.experiences_dir))
+        return 3
+
+    monkeypatch.setattr(interviewkit.cli, "ingest_experiences", fake_ingest_experiences)
+
+    result = runner.invoke(app, ["ingest", "--experiences-dir", "examples/experiences"])
+
+    assert result.exit_code == 0
+    assert seen_dirs == ["examples/experiences"]
+    assert "Indexed 3 experience chunks." in result.stdout
+
+
+def test_prep_command_runs_pipeline(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = CliRunner()
+    calls: list[tuple[str, str]] = []
+
+    async def fake_run_prep(jd: object, company: str) -> object:
+        calls.append((str(jd), company))
+
+        class FakeResult:
+            markdown = "# Interview prep: amazon\n"
+            session_path = "sessions/20260520-amazon.md"
+
+        return FakeResult()
+
+    monkeypatch.setattr(interviewkit.cli, "run_prep", fake_run_prep)
 
     result = runner.invoke(app, ["prep", "--jd", "job.txt", "--company", "amazon"])
 
     assert result.exit_code == 0
-    assert "Interview prep is not implemented yet" in result.stdout
+    assert calls == [("job.txt", "amazon")]
+    assert "# Interview prep: amazon" in result.stdout
+    assert "Session written to sessions/20260520-amazon.md" in result.stdout
 
 
 def test_init_db_command_delegates_to_vectorstore(monkeypatch: pytest.MonkeyPatch) -> None:
