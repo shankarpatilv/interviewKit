@@ -190,3 +190,56 @@ def test_openai_provider_reports_token_usage() -> None:
         assert (response.input_tokens, response.output_tokens) == (12, 7)
 
     asyncio.run(run_test())
+
+
+def test_openai_provider_reports_cached_prompt_tokens() -> None:
+    from types import SimpleNamespace
+
+    class _Completions(_FakeOpenAICompletions):
+        async def create(self, **kwargs: object) -> object:
+            return SimpleNamespace(
+                choices=[_OpenAIChoice(_OpenAIMessage("hello"))],
+                usage=SimpleNamespace(
+                    prompt_tokens=2454,
+                    completion_tokens=13,
+                    prompt_tokens_details=SimpleNamespace(cached_tokens=2304),
+                ),
+            )
+
+    async def run_test() -> None:
+        provider = OpenAIProvider(
+            app_settings=Settings(openai_api_key="sk-test", _env_file=None),
+            client=_FakeOpenAIClient(_Completions()),
+        )
+
+        response = await provider.complete([{"role": "user", "content": "hello"}])
+
+        assert (response.input_tokens, response.cached_input_tokens) == (2454, 2304)
+
+    asyncio.run(run_test())
+
+
+def test_claude_provider_counts_cache_reads_as_input() -> None:
+    from types import SimpleNamespace
+
+    class _Messages(_FakeClaudeMessages):
+        async def create(self, **kwargs: object) -> object:
+            return SimpleNamespace(
+                content=[_ClaudeBlock(type="text", text="hi")],
+                usage=SimpleNamespace(
+                    input_tokens=100, output_tokens=20, cache_read_input_tokens=900
+                ),
+            )
+
+    async def run_test() -> None:
+        provider = ClaudeProvider(
+            app_settings=Settings(anthropic_api_key="ak-test", _env_file=None),
+            client=_FakeClaudeClient(_Messages()),
+        )
+
+        response = await provider.complete([{"role": "user", "content": "hello"}])
+
+        assert (response.input_tokens, response.cached_input_tokens) == (1000, 900)
+        assert response.output_tokens == 20
+
+    asyncio.run(run_test())
