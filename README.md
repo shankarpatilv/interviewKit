@@ -71,7 +71,7 @@ docker compose --profile tracing up -d
 
 Set `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` in `.env` (any `pk-lf-...` /
 `sk-lf-...` values; the server creates a project with that key pair on first
-boot), then open http://localhost:3000. Set `LANGFUSE_PORT` and `LANGFUSE_HOST`
+boot), then open <http://localhost:3000>. Set `LANGFUSE_PORT` and `LANGFUSE_HOST`
 if port 3000 is taken. Tracing is off when the keys are unset. It's self-hosted
 because traces contain your private notes.
 
