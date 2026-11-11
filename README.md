@@ -89,6 +89,52 @@ Generated answers cite source files in this format:
 This keeps the generated prep tied to actual notes instead of floating around
 as generic AI advice.
 
+### MCP Server
+
+`interviewkit serve-mcp` exposes the ingestion and retrieval layer over the
+Model Context Protocol, so an MCP client such as Claude Code or Claude Desktop
+can index and search your experience notes directly.
+
+Three tools are registered:
+
+| Tool                 | Purpose                                                             |
+| -------------------- | ------------------------------------------------------------------- |
+| `init_database`      | Create the pgvector extension, experiences table, and indexes       |
+| `ingest_experiences` | Load, chunk, embed, and store markdown experience documents         |
+| `search_experiences` | Return the chunks most relevant to a query, with sources and scores |
+
+Register it with Claude Code:
+
+```bash
+claude mcp add interviewkit -- \
+  /path/to/interviewKit/.venv/bin/python -m interviewkit serve-mcp \
+  --project-dir /path/to/interviewKit
+```
+
+Or add it to a client config file directly:
+
+```json
+{
+  "mcpServers": {
+    "interviewkit": {
+      "command": "/path/to/interviewKit/.venv/bin/python",
+      "args": [
+        "-m", "interviewkit", "serve-mcp",
+        "--project-dir", "/path/to/interviewKit"
+      ]
+    }
+  }
+}
+```
+
+`--project-dir` matters. MCP clients launch servers from an arbitrary working
+directory, so without it the server cannot find `.env`, `experiences/`, or
+`companies/`. Use absolute paths for both the interpreter and the project root.
+
+The server reads the same `.env` and database settings as the CLI, and the same
+privacy rule applies: it searches your local notes and never uploads them
+anywhere beyond the embedding call the CLI already makes.
+
 ### Local Templates
 
 The repository includes public templates for company profiles and experience
@@ -103,6 +149,7 @@ career details should stay private.
 | CLI                             | Typer                                |
 | Document and retrieval plumbing | LangChain                            |
 | Workflow orchestration          | LangGraph                            |
+| Tool interoperability           | Model Context Protocol (MCP)         |
 | LLM provider                    | OpenAI behind a provider abstraction |
 | Optional provider adapter       | Claude wrapper                       |
 | Embeddings                      | OpenAI `text-embedding-3-small`      |
@@ -138,6 +185,7 @@ Session output is written under `sessions/`, which is ignored by Git.
 src/interviewkit/
   agent/        LangGraph workflows for question and answer generation
   ingest/       markdown loading, chunking, and embedding
+  mcp_server/   MCP tool surface over ingestion and retrieval
   providers/    OpenAI-first provider abstraction and optional Claude adapter
   retrieval/    PostgreSQL/pgvector schema, storage, search, and retriever
   prompts/      prompt templates loaded at runtime
