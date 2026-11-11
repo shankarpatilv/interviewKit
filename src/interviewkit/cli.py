@@ -9,6 +9,7 @@ from interviewkit.agent.prep import PrepError, run_prep
 from interviewkit import __version__
 from interviewkit.config import Settings
 from interviewkit.ingest.pipeline import ingest_experiences
+from interviewkit.mcp_server.server import Transport, run_server
 from interviewkit.retrieval.vectorstore import init_db
 
 app = typer.Typer(
@@ -69,6 +70,26 @@ def prep(
 
     typer.echo(result.markdown)
     typer.echo(f"Session written to {result.session_path}")
+
+
+@app.command("serve-mcp")
+def serve_mcp(
+    transport: Transport = typer.Option(
+        "stdio",
+        "--transport",
+        help="MCP transport to listen on.",
+    ),
+    project_dir: Path | None = typer.Option(
+        None,
+        "--project-dir",
+        help="Project root holding .env, experiences/, and companies/.",
+    ),
+) -> None:
+    """Expose ingestion and retrieval tools over MCP."""
+    try:
+        run_server(transport, project_dir)
+    except NotADirectoryError as exc:
+        raise typer.BadParameter(str(exc)) from exc
 
 
 @app.command()
