@@ -7,7 +7,10 @@ import typer
 
 from interviewkit.agent.prep import PrepError, run_prep
 from interviewkit import __version__
-from interviewkit.config import Settings
+from interviewkit.config import Settings, get_settings
+from interviewkit.evals.golden import GoldenSetError, load_golden_set
+from interviewkit.evals.report import render_scorecard, write_scorecard_json
+from interviewkit.evals.runner import run_eval
 from interviewkit.ingest.pipeline import ingest_experiences
 from interviewkit.mcp_server.server import Transport, run_server
 from interviewkit.retrieval.vectorstore import init_db
@@ -70,6 +73,32 @@ def prep(
 
     typer.echo(result.markdown)
     typer.echo(f"Session written to {result.session_path}")
+
+
+@app.command("eval")
+def eval_command(
+    golden: Path = typer.Option(
+        Path("evals/golden.jsonl"),
+        "--golden",
+        help="JSONL golden set of questions and expected stories.",
+    ),
+    k: int = typer.Option(5, "--k", min=1, max=20, help="Chunks retrieved per question."),
+    mode: str = typer.Option("vector", "--mode", help="Retrieval mode label: vector."),
+    save: bool = typer.Option(True, "--save/--no-save", help="Write a JSON scorecard."),
+) -> None:
+    """Score retrieval and answers against a golden set."""
+    if mode != "vector":
+        raise typer.BadParameter("Only 'vector' retrieval is available.", param_hint="--mode")
+    try:
+        cases = load_golden_set(golden)
+    except GoldenSetError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--golden") from exc
+
+    scorecard = asyncio.run(run_eval(cases, k=k, mode=mode))
+    typer.echo(render_scorecard(scorecard))
+    if save:
+        path = write_scorecard_json(scorecard, get_settings().sessions_dir)
+        typer.echo(f"Scorecard written to {path}")
 
 
 @app.command("serve-mcp")

@@ -20,10 +20,20 @@ class OpenAIProvider:
         model: str = OPENAI_CHAT_MODEL,
     ) -> None:
         self._settings = app_settings or get_settings()
-        self._client = client or AsyncOpenAI(
-            api_key=self._settings.provider_api_key("openai").get_secret_value()
-        )
+        self._client = client or self._build_client()
         self._model = model
+
+    def _build_client(self) -> Any:
+        """Build an AsyncOpenAI client, traced via Langfuse's drop-in when enabled."""
+        api_key = self._settings.provider_api_key("openai").get_secret_value()
+        if not self._settings.tracing_enabled:
+            return AsyncOpenAI(api_key=api_key)
+        from langfuse.openai import AsyncOpenAI as TracedAsyncOpenAI  # type: ignore[attr-defined]
+
+        from interviewkit.tracing import get_langfuse_client
+
+        get_langfuse_client(self._settings)
+        return TracedAsyncOpenAI(api_key=api_key)
 
     async def complete(
         self,
@@ -44,4 +54,11 @@ class OpenAIProvider:
             raise ProviderAPIError("OpenAI API call failed") from exc
 
         content = response.choices[0].message.content or ""
-        return ProviderResponse(content=content, provider="openai", model=self._model)
+        usage = getattr(response, "usage", None)
+        return ProviderResponse(
+            content=content,
+            provider="openai",
+            model=self._model,
+            input_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+            output_tokens=getattr(usage, "completion_tokens", 0) or 0,
+        )

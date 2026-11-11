@@ -44,6 +44,18 @@ class Settings(BaseSettings):
         ge=0,
         validation_alias=AliasChoices("CHUNK_OVERLAP", "INTERVIEWKIT_CHUNK_OVERLAP"),
     )
+    langfuse_public_key: SecretStr | None = Field(
+        default=None,
+        validation_alias=AliasChoices("LANGFUSE_PUBLIC_KEY", "INTERVIEWKIT_LANGFUSE_PUBLIC_KEY"),
+    )
+    langfuse_secret_key: SecretStr | None = Field(
+        default=None,
+        validation_alias=AliasChoices("LANGFUSE_SECRET_KEY", "INTERVIEWKIT_LANGFUSE_SECRET_KEY"),
+    )
+    langfuse_host: str = Field(
+        default="http://localhost:3000",
+        validation_alias=AliasChoices("LANGFUSE_HOST", "INTERVIEWKIT_LANGFUSE_HOST"),
+    )
     experiences_dir: Path = Path("experiences")
     companies_dir: Path = Path("companies")
     sessions_dir: Path = Path("sessions")
@@ -55,6 +67,11 @@ class Settings(BaseSettings):
             msg = "CHUNK_OVERLAP must be smaller than CHUNK_SIZE"
             raise ValueError(msg)
         return self
+
+    @property
+    def tracing_enabled(self) -> bool:
+        """Return True only when both Langfuse keys are configured."""
+        return self.langfuse_public_key is not None and self.langfuse_secret_key is not None
 
     def provider_api_key(self, provider: ProviderName | None = None) -> SecretStr:
         """Return the configured API key for a provider or raise a clear error."""

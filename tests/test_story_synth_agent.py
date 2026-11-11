@@ -132,3 +132,19 @@ def test_synthesize_star_answer_requires_retrieved_source_citation() -> None:
 
 def _document(content: str, source_file: str) -> Document:
     return Document(page_content=content, metadata={"source_file": source_file})
+
+
+def test_synthesize_star_answer_accepts_templated_refusal() -> None:
+    async def run_test() -> None:
+        refusal = f"Principle: Ownership\n{NO_MATCH_MESSAGE}\nSources:\n- none"
+        answer = await synthesize_star_answer(
+            question="Tell me about a time you led a hardware launch.",
+            principle="Ownership",
+            provider=FakeProvider(refusal),
+            retriever=FakeRetriever([_document("Unrelated story.", "other.md")]),
+        )
+
+        assert answer.sources == ()
+        assert NO_MATCH_MESSAGE in answer.text
+
+    asyncio.run(run_test())

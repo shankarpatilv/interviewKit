@@ -7,9 +7,11 @@ from langchain_core.documents import Document
 
 logger = logging.getLogger(__name__)
 
+GUIDANCE_FILES = frozenset({"readme.md"})
+
 
 def load_experience_documents(experiences_dir: Path | str = Path("experiences")) -> list[Document]:
-    """Load non-template markdown experience files as LangChain documents."""
+    """Load experience markdown files, skipping `_` templates and README guidance."""
     root = Path(experiences_dir)
     if not root.exists():
         logger.warning("Experience directory does not exist: %s", root)
@@ -17,7 +19,7 @@ def load_experience_documents(experiences_dir: Path | str = Path("experiences"))
 
     documents: list[Document] = []
     for path in sorted(root.rglob("*.md")):
-        if path.name.startswith("_"):
+        if path.name.startswith("_") or path.name.lower() in GUIDANCE_FILES:
             continue
 
         content = path.read_text(encoding="utf-8").strip()

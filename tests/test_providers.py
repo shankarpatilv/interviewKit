@@ -160,3 +160,33 @@ def test_claude_provider_requires_anthropic_sdk_when_client_is_not_injected() ->
 
     with pytest.raises(ProviderConfigurationError, match="Anthropic SDK"):
         ClaudeProvider(app_settings=settings)
+
+
+def test_openai_provider_reports_token_usage() -> None:
+    @dataclass
+    class _Usage:
+        prompt_tokens: int
+        completion_tokens: int
+
+    @dataclass
+    class _ResponseWithUsage(_OpenAIResponse):
+        usage: _Usage
+
+    class _Completions(_FakeOpenAICompletions):
+        async def create(self, **kwargs: object) -> _ResponseWithUsage:
+            return _ResponseWithUsage(
+                choices=[_OpenAIChoice(_OpenAIMessage("hello"))],
+                usage=_Usage(prompt_tokens=12, completion_tokens=7),
+            )
+
+    async def run_test() -> None:
+        provider = OpenAIProvider(
+            app_settings=Settings(openai_api_key="sk-test", _env_file=None),
+            client=_FakeOpenAIClient(_Completions()),
+        )
+
+        response = await provider.complete([{"role": "user", "content": "hello"}])
+
+        assert (response.input_tokens, response.output_tokens) == (12, 7)
+
+    asyncio.run(run_test())

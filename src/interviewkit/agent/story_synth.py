@@ -127,7 +127,7 @@ def _format_output(state: StorySynthesisState) -> StorySynthesisState:
     available_sources = source_files(state.get("retrieved_chunks", []))
     cited_sources = tuple(source for source in available_sources if source in raw_response)
 
-    if raw_response == NO_MATCH_MESSAGE:
+    if NO_MATCH_MESSAGE in raw_response and not cited_sources:
         return {"answer": StarAnswer(principle=principle, text=raw_response, sources=())}
     if not cited_sources:
         raise StorySynthesisError("STAR synthesis response did not cite a retrieved source file")
