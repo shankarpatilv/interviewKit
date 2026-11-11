@@ -2,243 +2,99 @@
 
 ![CLI](https://img.shields.io/badge/CLI-Typer-green) ![LangChain](https://img.shields.io/badge/RAG-LangChain-orange) ![LangGraph](https://img.shields.io/badge/Workflow-LangGraph-purple) ![OpenAI](https://img.shields.io/badge/LLM-OpenAI-black) ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-pgvector-blue)
 
-InterviewKit is a local CLI for the part of interview prep that is easy to
-avoid until it suddenly matters: turning your own messy work history into
-clear, company-specific behavioral stories.
-
-You write markdown notes about real projects you have worked on. InterviewKit
-indexes those notes with OpenAI embeddings, stores them in PostgreSQL with
-pgvector, retrieves the stories that match a role, and drafts behavioral
-questions and STAR answers with citations back to the source files.
-
-## What It Does
-
-- Loads private markdown experience notes from a local `experiences/` folder.
-- Splits experience documents into retrieval-friendly chunks while preserving
-  source-file and markdown-header metadata.
-- Generates OpenAI `text-embedding-3-small` embeddings for experience chunks.
-- Stores embedded chunks in PostgreSQL 15 with pgvector for semantic search.
-- Generates 5 to 8 company-specific behavioral interview questions from a job
-  description and company principles.
-- Retrieves relevant experience chunks for each question.
-- Drafts STAR-format answers using only retrieved experience context.
-- Cites the source experience file used for each generated answer.
-- Writes prep output to both the terminal and a markdown session file.
-
-## Why It Exists
-
-Behavioral prep is weirdly painful. You usually have the stories, but they are
-scattered across memory, notes, brag docs, tickets, and half-remembered
-projects. Then every company asks for the same raw material through a different
-lens: Amazon Leadership Principles, Microsoft competencies, startup values,
-role-specific expectations.
-
-InterviewKit makes that process less ad hoc. Write the experience notes once,
-then reuse them. The tool finds the relevant parts, drafts questions you are
-likely to hear, and turns the right stories into cited STAR answers.
-
-## How It Works
+A local CLI that turns your own work notes into company-specific behavioral
+interview prep. You write markdown about real projects. InterviewKit indexes
+them in pgvector, generates the questions a company is likely to ask, and drafts
+STAR answers that cite the notes they came from. If your notes don't cover a
+question, it says so instead of inventing a story.
 
 ```text
-experience markdown
-    -> LangChain loading and markdown-aware chunking
-    -> OpenAI embeddings
-    -> PostgreSQL + pgvector storage
-    -> LangChain semantic retrieval
-    -> LangGraph question and answer workflows
-    -> cited interview-prep markdown output
+experiences/*.md -> chunk -> embed (OpenAI) -> pgvector
+job description + company profile -> questions -> retrieve -> cited STAR answer
 ```
 
-The experience notes are the important part. Each file should describe a real
-project: what happened, what you owned, what decisions you made, what broke,
-what tradeoffs mattered, and what changed because of the work. InterviewKit
-does not try to invent a better career for you. It searches those notes and
-uses the matching chunks as evidence.
-
-## Core Features
-
-### Experience Ingestion
-
-`interviewkit ingest` reads markdown files from `experiences/`, skips
-templates, splits the useful text into chunks, embeds those chunks with
-OpenAI, and upserts them into the local pgvector table.
-
-### Company-Aware Questions
-
-`interviewkit prep` reads a job description and a company profile from
-`companies/`, then generates likely behavioral questions tagged with the
-principle or competency they are testing.
-
-### Retrieval-Grounded STAR Answers
-
-For each generated question, InterviewKit searches pgvector for relevant
-experience chunks and drafts an answer in STAR format: Situation, Task, Action,
-Result, and Sources.
-
-If the retrieved context is not good enough, it says so instead of making up a
-story. That is deliberate. A confident fake answer is worse than no answer.
-
-### Source Citations
-
-Generated answers cite source files in this format:
-
-```text
-(source: amazon-bedrock-pipeline.md)
-```
-
-This keeps the generated prep tied to actual notes instead of floating around
-as generic AI advice.
-
-### MCP Server
-
-`interviewkit serve-mcp` exposes the ingestion and retrieval layer over the
-Model Context Protocol, so an MCP client such as Claude Code or Claude Desktop
-can index and search your experience notes directly.
-
-Three tools are registered:
-
-| Tool                 | Purpose                                                             |
-| -------------------- | ------------------------------------------------------------------- |
-| `init_database`      | Create the pgvector extension, experiences table, and indexes       |
-| `ingest_experiences` | Load, chunk, embed, and store markdown experience documents         |
-| `search_experiences` | Return the chunks most relevant to a query, with sources and scores |
-
-Register it with Claude Code:
+## Quickstart
 
 ```bash
-claude mcp add interviewkit -- \
-  /path/to/interviewKit/.venv/bin/python -m interviewkit serve-mcp \
-  --project-dir /path/to/interviewKit
+python -m venv .venv && source .venv/bin/activate
+pip install -e '.[dev]'
+cp .env.example .env              # add OPENAI_API_KEY
+docker compose up -d              # Postgres 15 + pgvector
+
+interviewkit init-db
+interviewkit ingest               # index experiences/*.md
+interviewkit prep --jd jd.txt --company amazon
 ```
 
-Or add it to a client config file directly:
+Output prints to the terminal and is saved under `sessions/`.
 
-```json
-{
-  "mcpServers": {
-    "interviewkit": {
-      "command": "/path/to/interviewKit/.venv/bin/python",
-      "args": [
-        "-m", "interviewkit", "serve-mcp",
-        "--project-dir", "/path/to/interviewKit"
-      ]
-    }
-  }
-}
-```
+## Writing Experience Notes
 
-`--project-dir` matters. MCP clients launch servers from an arbitrary working
-directory, so without it the server cannot find `.env`, `experiences/`, or
-`companies/`. Use absolute paths for both the interpreter and the project root.
+Copy `experiences/_template.md` for each job or project and fill it in. Answers
+are only as good as these notes, so cover what you owned, the decisions you made,
+what broke, the tradeoffs, and the numbers. Your filled-in files are git-ignored
+and never leave your machine except as embedding and LLM API calls.
 
-The server reads the same `.env` and database settings as the CLI, and the same
-privacy rule applies: it searches your local notes and never uploads them
-anywhere beyond the embedding call the CLI already makes.
+Company profiles live in `companies/` (Amazon and Microsoft included). Copy
+`companies/_template.md` to add another.
 
-### Local Templates
+## Measuring Quality
 
-The repository includes public templates for company profiles and experience
-documents. Filled-in personal experience files are ignored by Git. Your private
-career details should stay private.
+`interviewkit eval` runs a golden set of questions through retrieval and answer
+drafting, then prints a scorecard. Every metric is checked in code, with no
+LLM grading another LLM:
 
-## Tech Stack
+- **Recall@k**: was the expected story retrieved?
+- **Groundedness**: were all cited sources actually retrieved?
+- **Metric fidelity**: does every number in the answer appear in a cited chunk?
+- **Refusal accuracy**: did it refuse exactly when there was no matching story?
 
-| Layer                           | Technology                           |
-| ------------------------------- | ------------------------------------ |
-| Language                        | Python 3.11+                         |
-| CLI                             | Typer                                |
-| Document and retrieval plumbing | LangChain                            |
-| Workflow orchestration          | LangGraph                            |
-| Tool interoperability           | Model Context Protocol (MCP)         |
-| LLM provider                    | OpenAI behind a provider abstraction |
-| Optional provider adapter       | Claude wrapper                       |
-| Embeddings                      | OpenAI `text-embedding-3-small`      |
-| Vector database                 | PostgreSQL 15 with pgvector          |
-| Configuration                   | Pydantic Settings                    |
-| Testing                         | pytest, Ruff, mypy, Black            |
-| Local services                  | Docker Compose                       |
-
-## Example Workflow
+It also reports latency and estimated cost. Your real golden set goes in
+`evals/golden.jsonl`, which is git-ignored. `evals/golden.example.jsonl` shows
+the format.
 
 ```bash
-# Install locally
-python -m pip install -e '.[dev]'
-
-# Start PostgreSQL with pgvector
-docker compose up -d
-
-# Initialize the database schema
-python -m interviewkit init-db
-
-# Index private experience documents
-python -m interviewkit ingest
-
-# Generate prep for a role and company
-python -m interviewkit prep --jd path/to/job-description.txt --company amazon
+interviewkit eval --golden evals/golden.jsonl --k 5
 ```
 
-Session output is written under `sessions/`, which is ignored by Git.
+Current baseline on 40 cases (vector search only): 77% recall@5, 0 unsupported
+numbers, 95% refusal accuracy. Details in `resources/quality-baseline.md`.
 
 ## Tracing (optional)
 
-InterviewKit can send LangGraph runs and LLM calls to a self-hosted
-[Langfuse](https://langfuse.com) instance for debugging prompts, latency, and token cost.
+Run a self-hosted [Langfuse](https://langfuse.com) to inspect every step, prompt,
+and token cost:
 
 ```bash
-# Start the Langfuse stack alongside pgvector (plain `docker compose up` skips it)
 docker compose --profile tracing up -d
 ```
 
-1. In `.env`, set `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and optionally
-   `LANGFUSE_HOST` (default `http://localhost:3000`). See `.env.example`. On first
-   boot Langfuse creates a project with that key pair plus a login from
-   `LANGFUSE_INIT_USER_EMAIL` / `LANGFUSE_INIT_USER_PASSWORD`.
-2. Open http://localhost:3000 and sign in to browse traces. If port 3000 is
-   taken, set `LANGFUSE_PORT=3100` and `LANGFUSE_HOST=http://localhost:3100`.
+Set `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` in `.env` (any `pk-lf-...` /
+`sk-lf-...` values; the server creates a project with that key pair on first
+boot), then open http://localhost:3000. Set `LANGFUSE_PORT` and `LANGFUSE_HOST`
+if port 3000 is taken. Tracing is off when the keys are unset. It's self-hosted
+because traces contain your private notes.
 
-Each `interviewkit eval` case becomes one trace (`eval:<case id>`) holding the
-graph steps, the retrieval embedding, and the LLM generation with token cost.
+## MCP Server
 
-Traces contain full prompt text, including your private experience content, which is
-why the stack is self-hosted rather than sent to a cloud service. Tracing is off
-whenever either key is unset, and Langfuse is never imported in that case.
+`interviewkit serve-mcp` exposes `init_database`, `ingest_experiences`, and
+`search_experiences` to MCP clients like Claude Code:
 
-## Repository Layout
-
-```text
-src/interviewkit/
-  agent/        LangGraph workflows for question and answer generation
-  ingest/       markdown loading, chunking, and embedding
-  mcp_server/   MCP tool surface over ingestion and retrieval
-  providers/    OpenAI-first provider abstraction and optional Claude adapter
-  retrieval/    PostgreSQL/pgvector schema, storage, search, and retriever
-  prompts/      prompt templates loaded at runtime
-  cli.py        Typer command entry point
-  config.py     Pydantic settings
-
-companies/      company principles and interview rubrics
-examples/       public examples and templates
-experiences/    local private experience notes, ignored by Git
-resources/      local usage and checkpoint notes
-sessions/       generated prep outputs, ignored by Git
-tests/          pytest test suite
+```bash
+claude mcp add interviewkit -- /abs/path/.venv/bin/python -m interviewkit \
+  serve-mcp --project-dir /abs/path/to/interviewKit
 ```
 
-## Design Principles
+`--project-dir` is required because MCP clients start the server from an
+arbitrary directory.
 
-- Keep private career details local.
-- Ground answers in retrieved notes, not vibes.
-- Preserve `source_file` metadata all the way to the final citation.
-- Use explicit LangGraph workflows instead of loose autonomous agent loops.
-- Keep CLI commands thin; put real behavior in library code.
-- Prefer boring, typed Python over clever framework magic.
-- Test LLM and retrieval behavior with fake providers where possible.
+## Stack
 
-## Status
+Python 3.11+, Typer, LangChain, LangGraph, OpenAI (GPT-4o, `text-embedding-3-small`;
+optional Claude adapter), PostgreSQL 15 + pgvector, Pydantic Settings, pytest.
 
-InterviewKit provides a local workflow for behavioral interview prep: ingest
-private experience notes, generate company-specific questions, retrieve
-relevant stories, draft STAR answers, and cite source files.
+## What's Next
 
-Story reuse tracking, multi-turn mock interviews, richer evaluation, and answer
-quality scoring are planned extensions beyond this core CLI workflow.
+Hybrid retrieval (Postgres full-text plus vector search), story-level metadata,
+and a bounded agent for story selection with a deterministic grounding check.
+Each change is measured against the golden set.
