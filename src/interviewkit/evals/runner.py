@@ -23,7 +23,7 @@ from interviewkit.evals.metrics import (
 from interviewkit.evals.models import CaseResult, Scorecard
 from interviewkit.providers import LLMProvider, get_provider
 from interviewkit.retrieval.retriever import ExperienceRetriever
-from interviewkit.tracing import flush_traces, trace_config
+from interviewkit.tracing import flush_traces, trace_config, trace_run
 
 logger = logging.getLogger(__name__)
 
@@ -47,17 +47,16 @@ async def run_eval(
     results = []
     for case in cases:
         metered.reset()
-        config = trace_config(
-            settings,
-            run_name=f"eval:{case.id}",
-            tags=("eval", f"mode:{mode}", f"k:{k}"),
-            metadata={"case_id": case.id, "company": case.company},
-        )
+        name = f"eval:{case.id}"
+        tags = ("eval", f"mode:{mode}", f"k:{k}")
+        metadata = {"case_id": case.id, "company": case.company}
+        config = trace_config(settings, run_name=name, tags=tags, metadata=metadata)
         started = perf_counter()
         try:
-            state = await graph.ainvoke(
-                {"question": case.question, "principle": case.principle}, config=config
-            )
+            with trace_run(settings, name=name, tags=tags, metadata=metadata):
+                state = await graph.ainvoke(
+                    {"question": case.question, "principle": case.principle}, config=config
+                )
             result = score_case(case, state, k)
         except Exception as exc:  # one bad case must not abort the run
             logger.exception("Eval case %s failed", case.id)
