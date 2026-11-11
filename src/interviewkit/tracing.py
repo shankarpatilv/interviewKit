@@ -5,7 +5,8 @@ unless both Langfuse keys are configured.
 """
 
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
 from langchain_core.runnables import RunnableConfig
@@ -68,3 +69,25 @@ def flush_traces(app_settings: Settings | None = None) -> None:
     if not resolved.tracing_enabled:
         return
     get_langfuse_client(resolved).flush()
+
+
+@contextmanager
+def trace_run(
+    app_settings: Settings | None = None,
+    *,
+    name: str,
+    tags: Sequence[str] = (),
+    metadata: Mapping[str, str] | None = None,
+) -> Iterator[None]:
+    """Open one root Langfuse span so graph steps and LLM calls share a trace."""
+    resolved = app_settings or get_settings()
+    if not resolved.tracing_enabled:
+        yield
+        return
+
+    from langfuse import propagate_attributes
+
+    client = get_langfuse_client(resolved)
+    with client.start_as_current_observation(name=name, as_type="span"):
+        with propagate_attributes(trace_name=name, tags=list(tags), metadata=dict(metadata or {})):
+            yield

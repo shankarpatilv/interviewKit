@@ -79,3 +79,45 @@ def test_flush_calls_client_flush_when_enabled(monkeypatch: pytest.MonkeyPatch) 
     tracing.flush_traces(_enabled())
 
     assert calls == ["flush"]
+
+
+def test_trace_run_is_noop_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _fail(_: Settings) -> None:
+        raise AssertionError("client must not be built when tracing is disabled")
+
+    monkeypatch.setattr(tracing, "get_langfuse_client", _fail)
+
+    with tracing.trace_run(_settings(), name="eval:case"):
+        pass
+
+
+def test_trace_run_opens_root_span_with_attributes(monkeypatch: pytest.MonkeyPatch) -> None:
+    from contextlib import contextmanager
+    from collections.abc import Iterator
+
+    import langfuse
+
+    events: list[tuple[str, Any]] = []
+
+    class _Client:
+        @contextmanager
+        def start_as_current_observation(self, **kwargs: Any) -> Iterator[None]:
+            events.append(("span", kwargs))
+            yield
+
+    @contextmanager
+    def _propagate(**kwargs: Any) -> Iterator[None]:
+        events.append(("attrs", kwargs))
+        yield
+
+    monkeypatch.setattr(tracing, "get_langfuse_client", lambda _: _Client())
+    monkeypatch.setattr(langfuse, "propagate_attributes", _propagate)
+
+    with tracing.trace_run(_enabled(), name="eval:c1", tags=("eval",), metadata={"k": "5"}):
+        events.append(("body", None))
+
+    assert events == [
+        ("span", {"name": "eval:c1", "as_type": "span"}),
+        ("attrs", {"trace_name": "eval:c1", "tags": ["eval"], "metadata": {"k": "5"}}),
+        ("body", None),
+    ]

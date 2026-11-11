@@ -193,7 +193,11 @@ docker compose --profile tracing up -d
    `LANGFUSE_HOST` (default `http://localhost:3000`). See `.env.example`. On first
    boot Langfuse creates a project with that key pair plus a login from
    `LANGFUSE_INIT_USER_EMAIL` / `LANGFUSE_INIT_USER_PASSWORD`.
-2. Open http://localhost:3000 and sign in to browse traces.
+2. Open http://localhost:3000 and sign in to browse traces. If port 3000 is
+   taken, set `LANGFUSE_PORT=3100` and `LANGFUSE_HOST=http://localhost:3100`.
+
+Each `interviewkit eval` case becomes one trace (`eval:<case id>`) holding the
+graph steps, the retrieval embedding, and the LLM generation with token cost.
 
 Traces contain full prompt text, including your private experience content, which is
 why the stack is self-hosted rather than sent to a cloud service. Tracing is off
