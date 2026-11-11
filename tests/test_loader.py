@@ -53,3 +53,12 @@ def test_load_experience_documents_missing_directory_warns(tmp_path, caplog) -> 
 
     assert documents == []
     assert "Experience directory does not exist" in caplog.text
+
+
+def test_load_experience_documents_skips_readme_guidance(tmp_path) -> None:
+    (tmp_path / "README.md").write_text("# How to write experiences", encoding="utf-8")
+    (tmp_path / "story.md").write_text("# Story\n\nShipped it.", encoding="utf-8")
+
+    documents = load_experience_documents(tmp_path)
+
+    assert [doc.metadata["source_file"] for doc in documents] == ["story.md"]

@@ -47,10 +47,13 @@ class ClaudeProvider:
         except Exception as exc:
             raise ProviderAPIError("Claude API call failed") from exc
 
+        usage = getattr(response, "usage", None)
         return ProviderResponse(
             content=_extract_text(response),
             provider="claude",
             model=self._model,
+            input_tokens=getattr(usage, "input_tokens", 0) or 0,
+            output_tokens=getattr(usage, "output_tokens", 0) or 0,
         )
 
     def _build_client(self) -> Any:

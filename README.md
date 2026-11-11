@@ -132,6 +132,26 @@ python -m interviewkit prep --jd path/to/job-description.txt --company amazon
 
 Session output is written under `sessions/`, which is ignored by Git.
 
+## Tracing (optional)
+
+InterviewKit can send LangGraph runs and LLM calls to a self-hosted
+[Langfuse](https://langfuse.com) instance for debugging prompts, latency, and token cost.
+
+```bash
+# Start the Langfuse stack alongside pgvector (plain `docker compose up` skips it)
+docker compose --profile tracing up -d
+```
+
+1. In `.env`, set `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and optionally
+   `LANGFUSE_HOST` (default `http://localhost:3000`). See `.env.example`. On first
+   boot Langfuse creates a project with that key pair plus a login from
+   `LANGFUSE_INIT_USER_EMAIL` / `LANGFUSE_INIT_USER_PASSWORD`.
+2. Open http://localhost:3000 and sign in to browse traces.
+
+Traces contain full prompt text, including your private experience content, which is
+why the stack is self-hosted rather than sent to a cloud service. Tracing is off
+whenever either key is unset, and Langfuse is never imported in that case.
+
 ## Repository Layout
 
 ```text

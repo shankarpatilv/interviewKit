@@ -13,6 +13,7 @@
 !/experiences/
 !/experiences/_template.md
 !/experiences/README.md
+/evals/golden.jsonl
 /sessions/
 /scripts/
 .env
