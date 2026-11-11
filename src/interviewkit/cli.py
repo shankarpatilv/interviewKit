@@ -12,6 +12,7 @@ from interviewkit.evals.golden import GoldenSetError, load_golden_set
 from interviewkit.evals.report import render_scorecard, write_scorecard_json
 from interviewkit.evals.runner import run_eval
 from interviewkit.ingest.pipeline import ingest_experiences
+from interviewkit.mcp_server.server import Transport, run_server
 from interviewkit.retrieval.vectorstore import init_db
 
 app = typer.Typer(
@@ -98,6 +99,26 @@ def eval_command(
     if save:
         path = write_scorecard_json(scorecard, get_settings().sessions_dir)
         typer.echo(f"Scorecard written to {path}")
+
+
+@app.command("serve-mcp")
+def serve_mcp(
+    transport: Transport = typer.Option(
+        "stdio",
+        "--transport",
+        help="MCP transport to listen on.",
+    ),
+    project_dir: Path | None = typer.Option(
+        None,
+        "--project-dir",
+        help="Project root holding .env, experiences/, and companies/.",
+    ),
+) -> None:
+    """Expose ingestion and retrieval tools over MCP."""
+    try:
+        run_server(transport, project_dir)
+    except NotADirectoryError as exc:
+        raise typer.BadParameter(str(exc)) from exc
 
 
 @app.command()
