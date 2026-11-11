@@ -91,7 +91,8 @@ arbitrary directory.
 ## Stack
 
 Python 3.11+, Typer, LangChain, LangGraph, OpenAI (GPT-4o, `text-embedding-3-small`;
-optional Claude adapter), PostgreSQL 15 + pgvector, Pydantic Settings, pytest.
+optional Claude adapter), PostgreSQL 15 + pgvector, Langfuse (self-hosted tracing),
+MCP, Pydantic Settings, pytest, Docker Compose.
 
 ## What's Next
 
