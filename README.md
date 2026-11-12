@@ -3,41 +3,29 @@
 ![CLI](https://img.shields.io/badge/CLI-Typer-green) ![LangChain](https://img.shields.io/badge/RAG-LangChain-orange) ![LangGraph](https://img.shields.io/badge/Workflow-LangGraph-purple) ![OpenAI](https://img.shields.io/badge/LLM-OpenAI-black) ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-pgvector-blue)
 
 A local CLI that turns your own work notes into company-specific behavioral
-interview prep. You write markdown about real projects. InterviewKit indexes
-them in pgvector, generates the questions a company is likely to ask, and drafts
-STAR answers that cite the notes they came from. If your notes don't cover a
-question, it says so instead of inventing a story.
+interview prep: likely questions, plus STAR answers built only from your notes.
 
 ## How It Works
 
-```mermaid
-flowchart TD
-    subgraph ingest ["1. interviewkit ingest"]
-        A["experiences/*.md<br/>your private notes"] --> B["Split by # / ## / ###<br/>one chunk per story + story_id"]
-        B --> C["Embed with OpenAI<br/>text-embedding-3-small"]
-        C --> D[("Postgres<br/>pgvector + full-text index")]
-    end
+**1. You write notes once.** Each job or project gets a markdown file, and each
+story in it gets its own `###` heading.
 
-    subgraph prep ["2. interviewkit prep"]
-        E["Job description +<br/>companies/amazon.md"] --> F["Generate 5-8 questions<br/>GPT-4o, tagged by principle"]
-        F --> G["For each question:<br/>hybrid search, top 5 chunks"]
-        G --> H{"GPT-4o: do these chunks<br/>support an answer?"}
-        H -- yes --> I["STAR answer<br/>citing source files"]
-        H -- no --> J["Refusal:<br/>no matching experience"]
-        I --> K["Terminal + sessions/*.md"]
-        J --> K
-    end
+**2. `ingest` makes them searchable.** Every story becomes its own chunk, with
+its headings kept in the text so the title counts. Postgres stores each chunk
+with two ways to find it: an OpenAI embedding (for meaning) and a full-text
+index (for exact words).
 
-    D -. "vector similarity + keyword match,<br/>merged by rank fusion" .-> G
-```
+**3. `prep` writes the prep.** You give it a job description and a company.
+GPT-4o reads the company's principles and writes 5 to 8 likely questions. For
+each one, InterviewKit runs two searches: one for chunks that *mean* something
+similar, one for chunks that share the *words*. It merges the two lists by
+rank, so a story both searches like rises to the top, and hands the best five
+to GPT-4o. GPT-4o writes a STAR answer from those chunks only and cites the
+files it used. If nothing fits, it says so instead of making something up.
 
-1. **Ingest** turns each story in your notes into a chunk, keeps its headings
-   in the text, and stores it with both an embedding and a full-text index.
-2. **Prep** asks GPT-4o for the questions a company would ask, finds the best
-   five chunks per question by combining meaning-based and keyword search, and
-   drafts an answer only from those chunks, or refuses if none fit.
-3. **Eval** (`interviewkit eval`) runs a golden set through step 2 and scores
-   it, so every change to retrieval or prompts is measured.
+**4. `eval` keeps it honest.** A set of questions with known right answers runs
+through step 3, and a scorecard shows whether the right stories came back and
+whether every citation and number in the answers traces to your notes.
 
 ## Quickstart
 
@@ -49,20 +37,16 @@ docker compose up -d              # Postgres 15 + pgvector
 
 interviewkit init-db
 interviewkit ingest               # index experiences/*.md
-interviewkit prep --jd jd.txt --company amazon
+interviewkit prep --jd jd.txt --company amazon   # also saved to sessions/
 ```
-
-Output prints to the terminal and is saved under `sessions/`.
 
 ## Writing Experience Notes
 
 Copy `experiences/_template.md` for each job or project and fill it in. Answers
 are only as good as these notes, so cover what you owned, the decisions you made,
 what broke, the tradeoffs, and the numbers. Your filled-in files are git-ignored
-and never leave your machine except as embedding and LLM API calls.
-
-Company profiles live in `companies/` (Amazon and Microsoft included). Copy
-`companies/_template.md` to add another.
+and never leave your machine except as embedding and LLM API calls. Company
+profiles live in `companies/` (Amazon and Microsoft included).
 
 ## Measuring Quality
 
@@ -76,27 +60,18 @@ LLM grading another LLM:
 - **Refusal accuracy**: did it refuse exactly when there was no matching story?
 
 It also reports latency and cost. Put your golden set in the git-ignored
-`evals/golden.jsonl` (format: `evals/golden.example.jsonl`), then run
-`interviewkit eval --golden evals/golden.jsonl --mode hybrid`.
-
-Retrieval is hybrid by default: pgvector similarity plus Postgres full-text
-search, merged with reciprocal rank fusion. On 40 cases it lifted story-level
-recall@5 from 56% to 73% with 0 unsupported numbers (`resources/quality-results.md`).
+`evals/golden.jsonl` (format: `evals/golden.example.jsonl`). On 40 cases, the
+two-search approach lifted story-level recall@5 from 56% to 73% over meaning-only
+search, with 0 unsupported numbers (`resources/quality-results.md`).
 
 ## Tracing (optional)
 
-Run a self-hosted [Langfuse](https://langfuse.com) to inspect every step, prompt,
-and token cost:
-
-```bash
-docker compose --profile tracing up -d
-```
-
-Set `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` in `.env` (any `pk-lf-...` /
-`sk-lf-...` values; the server creates a project with that key pair on first
-boot), then open <http://localhost:3000>. Set `LANGFUSE_PORT` and `LANGFUSE_HOST`
-if port 3000 is taken. Tracing is off when the keys are unset. It's self-hosted
-because traces contain your private notes.
+`docker compose --profile tracing up -d` starts a self-hosted
+[Langfuse](https://langfuse.com) for inspecting every step, prompt, and token
+cost. Set any `pk-lf-...` / `sk-lf-...` pair as `LANGFUSE_PUBLIC_KEY` /
+`LANGFUSE_SECRET_KEY` in `.env` and open <http://localhost:3000> (change
+`LANGFUSE_PORT` and `LANGFUSE_HOST` if it's taken). Tracing is off without keys,
+and it's self-hosted because traces contain your private notes.
 
 ## MCP Server
 
@@ -108,8 +83,7 @@ claude mcp add interviewkit -- /abs/path/.venv/bin/python -m interviewkit \
   serve-mcp --project-dir /abs/path/to/interviewKit
 ```
 
-`--project-dir` is required because MCP clients start the server from an
-arbitrary directory.
+`--project-dir` is required because MCP clients start servers from anywhere.
 
 ## Stack
 
@@ -119,6 +93,6 @@ MCP, Pydantic Settings, pytest, Docker Compose.
 
 ## What's Next
 
-A bounded agent for story selection that avoids reusing stories, followed by a
-deterministic grounding check on every answer.
-Each change is measured against the golden set.
+A bounded agent that picks stories while avoiding ones you've already used, and
+a code-level check that every cited chunk and number is real. Each change is
+measured against the golden set.
