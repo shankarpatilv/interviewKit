@@ -8,6 +8,7 @@ from pydantic import AliasChoices, Field, PositiveInt, SecretStr, model_validato
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ProviderName = Literal["claude", "openai"]
+RetrievalMode = Literal["vector", "hybrid"]
 
 
 class Settings(BaseSettings):
@@ -55,6 +56,10 @@ class Settings(BaseSettings):
     langfuse_host: str = Field(
         default="http://localhost:3000",
         validation_alias=AliasChoices("LANGFUSE_HOST", "INTERVIEWKIT_LANGFUSE_HOST"),
+    )
+    retrieval_mode: RetrievalMode = Field(
+        default="hybrid",
+        validation_alias=AliasChoices("RETRIEVAL_MODE", "INTERVIEWKIT_RETRIEVAL_MODE"),
     )
     experiences_dir: Path = Path("experiences")
     companies_dir: Path = Path("companies")

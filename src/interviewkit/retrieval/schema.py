@@ -25,11 +25,23 @@ CREATE INDEX IF NOT EXISTS idx_experiences_source
 ON experiences(source_file)
 """
 
+# Full-text search: a generated tsvector column stays in sync with chunk_text.
+ADD_EXPERIENCES_TSV_COLUMN_SQL = """
+ALTER TABLE experiences ADD COLUMN IF NOT EXISTS chunk_tsv tsvector
+GENERATED ALWAYS AS (to_tsvector('english', chunk_text)) STORED
+"""
+
+CREATE_EXPERIENCES_TSV_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_experiences_tsv ON experiences USING GIN (chunk_tsv)
+"""
+
 SCHEMA_STATEMENTS = (
     CREATE_VECTOR_EXTENSION_SQL,
     CREATE_EXPERIENCES_TABLE_SQL,
     CREATE_EXPERIENCES_EMBEDDING_INDEX_SQL,
     CREATE_EXPERIENCES_SOURCE_INDEX_SQL,
+    ADD_EXPERIENCES_TSV_COLUMN_SQL,
+    CREATE_EXPERIENCES_TSV_INDEX_SQL,
 )
 
 UPSERT_CHUNK_SQL = """
@@ -49,6 +61,20 @@ DELETE FROM experiences WHERE NOT (id = ANY(%s))
 SIMILARITY_SEARCH_SQL = """
 SELECT source_file, chunk_text, chunk_meta, 1 - (embedding <=> %s::vector) AS similarity
 FROM experiences
+WHERE chunk_meta @> %s::jsonb
 ORDER BY (embedding <=> %s::vector) + 0
+LIMIT %s
+"""
+
+# plainto_tsquery ANDs every word, which rarely matches a full interview
+# question; rewriting `&` to `|` ORs the stemmed, stopword-free terms instead.
+KEYWORD_SEARCH_SQL = """
+WITH q AS (
+    SELECT replace(plainto_tsquery('english', %s)::text, ' & ', ' | ')::tsquery AS query
+)
+SELECT source_file, chunk_text, chunk_meta, ts_rank_cd(chunk_tsv, q.query) AS score
+FROM experiences, q
+WHERE chunk_tsv @@ q.query AND chunk_meta @> %s::jsonb
+ORDER BY score DESC, id
 LIMIT %s
 """

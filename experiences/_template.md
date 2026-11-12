@@ -1,3 +1,11 @@
+---
+# Optional tags, copied onto every chunk and usable as retrieval filters.
+company: Company Name
+role: Your Title
+timeframe: Month Year - Month Year
+competencies: [Ownership, Dive Deep]
+---
+
 # Experience: Project Or Role Name
 
 ## Context

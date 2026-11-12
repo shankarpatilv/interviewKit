@@ -2,12 +2,13 @@
 
 import asyncio
 from pathlib import Path
+from typing import cast
 
 import typer
 
 from interviewkit.agent.prep import PrepError, run_prep
 from interviewkit import __version__
-from interviewkit.config import Settings, get_settings
+from interviewkit.config import RetrievalMode, Settings, get_settings
 from interviewkit.evals.golden import GoldenSetError, load_golden_set
 from interviewkit.evals.report import render_scorecard, write_scorecard_json
 from interviewkit.evals.runner import run_eval
@@ -83,18 +84,18 @@ def eval_command(
         help="JSONL golden set of questions and expected stories.",
     ),
     k: int = typer.Option(5, "--k", min=1, max=20, help="Chunks retrieved per question."),
-    mode: str = typer.Option("vector", "--mode", help="Retrieval mode label: vector."),
+    mode: str = typer.Option("hybrid", "--mode", help="Retrieval mode: hybrid or vector."),
     save: bool = typer.Option(True, "--save/--no-save", help="Write a JSON scorecard."),
 ) -> None:
     """Score retrieval and answers against a golden set."""
-    if mode != "vector":
-        raise typer.BadParameter("Only 'vector' retrieval is available.", param_hint="--mode")
+    if mode not in ("vector", "hybrid"):
+        raise typer.BadParameter("Use 'vector' or 'hybrid'.", param_hint="--mode")
     try:
         cases = load_golden_set(golden)
     except GoldenSetError as exc:
         raise typer.BadParameter(str(exc), param_hint="--golden") from exc
 
-    scorecard = asyncio.run(run_eval(cases, k=k, mode=mode))
+    scorecard = asyncio.run(run_eval(cases, k=k, mode=cast(RetrievalMode, mode)))
     typer.echo(render_scorecard(scorecard))
     if save:
         path = write_scorecard_json(scorecard, get_settings().sessions_dir)

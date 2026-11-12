@@ -53,7 +53,7 @@ def test_eval_command_prints_scorecard(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     assert result.exit_code == 0, result.stdout
-    assert seen == {"count": 6, "k": 3, "mode": "vector"}
+    assert seen == {"count": 6, "k": 3, "mode": "hybrid"}
     assert "InterviewKit eval" in result.stdout
 
 

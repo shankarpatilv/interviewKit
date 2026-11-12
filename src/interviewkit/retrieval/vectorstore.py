@@ -1,5 +1,8 @@
 """PostgreSQL and pgvector storage helpers."""
 
+import json
+from collections.abc import Mapping
+
 from interviewkit.config import Settings, get_settings
 from interviewkit.ingest.embedder import EmbeddedDocument
 from interviewkit.retrieval.connection import ConnectFactory, default_connect
@@ -66,10 +69,15 @@ def similarity_search(
     query_embedding: list[float],
     *,
     k: int = 5,
+    filters: Mapping[str, object] | None = None,
     app_settings: Settings | None = None,
     connect: ConnectFactory = default_connect,
 ) -> list[RetrievedDocument]:
-    """Return the top-k chunks closest to a query embedding."""
+    """Return the top-k chunks closest to a query embedding.
+
+    `filters` must be contained in chunk metadata (JSONB `@>`), e.g.
+    `{"source_file": "a.md"}` or `{"competencies": ["Ownership"]}`.
+    """
     resolved_settings = app_settings or get_settings()
     connection = connect(resolved_settings.database_url)
 
@@ -77,7 +85,12 @@ def similarity_search(
         with connection.cursor() as cursor:
             cursor.execute(
                 SIMILARITY_SEARCH_SQL,
-                (vector_literal(query_embedding), vector_literal(query_embedding), k),
+                (
+                    vector_literal(query_embedding),
+                    json.dumps(dict(filters or {})),
+                    vector_literal(query_embedding),
+                    k,
+                ),
             )
             rows = cursor.fetchall()
         connection.commit()

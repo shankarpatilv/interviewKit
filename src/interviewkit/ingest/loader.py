@@ -5,6 +5,8 @@ import logging
 
 from langchain_core.documents import Document
 
+from interviewkit.ingest.frontmatter import split_frontmatter
+
 logger = logging.getLogger(__name__)
 
 GUIDANCE_FILES = frozenset({"readme.md"})
@@ -22,7 +24,7 @@ def load_experience_documents(experiences_dir: Path | str = Path("experiences"))
         if path.name.startswith("_") or path.name.lower() in GUIDANCE_FILES:
             continue
 
-        content = path.read_text(encoding="utf-8").strip()
+        tags, content = split_frontmatter(path.read_text(encoding="utf-8").strip())
         if not content:
             logger.warning("Skipping empty experience file: %s", path)
             continue
@@ -30,7 +32,7 @@ def load_experience_documents(experiences_dir: Path | str = Path("experiences"))
         documents.append(
             Document(
                 page_content=content,
-                metadata={"source_file": path.relative_to(root).as_posix()},
+                metadata={**tags, "source_file": path.relative_to(root).as_posix()},
             )
         )
 

@@ -152,7 +152,7 @@ def test_similarity_search_returns_ranked_documents_with_metadata() -> None:
 
     statement, params = connection.cursor_instance.statements[0]
     assert "ORDER BY (embedding <=>" in statement
-    assert params == ("[0.1,0.2]", "[0.1,0.2]", 1)
+    assert params == ("[0.1,0.2]", "{}", "[0.1,0.2]", 1)
     assert len(results) == 1
     assert results[0].document.page_content == "Built a moderation pipeline."
     assert results[0].document.metadata == {"header_1": "Amazon", "source_file": "amazon.md"}
