@@ -73,7 +73,14 @@ class ExperienceRetriever(BaseRetriever):
             results = similarity_search(
                 embedding, k=self.k, filters=self.filters, app_settings=self._settings
             )
-        return [result.document for result in results]
+        # Keep the rank score (cosine or RRF) in metadata for callers that show it.
+        return [
+            Document(
+                page_content=result.document.page_content,
+                metadata={**result.document.metadata, "score": result.similarity},
+            )
+            for result in results
+        ]
 
     def _hybrid(self, query: str, embedding: list[float]) -> list[RetrievedDocument]:
         if self.hybrid is not None:

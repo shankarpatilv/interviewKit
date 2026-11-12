@@ -8,11 +8,22 @@ from mcp.server import MCPServer
 from mcp.types import ToolAnnotations
 
 from interviewkit import __version__
-from interviewkit.config import get_settings
-from interviewkit.mcp_server.models import IngestResult, InitDatabaseResult, SearchHit
+from interviewkit.config import RetrievalMode, StorySelection, get_settings
+from interviewkit.mcp_server.models import (
+    CompanyRubric,
+    IngestResult,
+    InitDatabaseResult,
+    PrepAnswerResult,
+    SearchHit,
+    StoryUsage,
+)
 from interviewkit.mcp_server.tools import (
+    get_story_chunks,
     ingest_experience_documents,
     initialize_database,
+    prep_answer,
+    read_company_rubric,
+    read_story_usage,
     search_experience_chunks,
 )
 
@@ -21,8 +32,12 @@ Transport = Literal["stdio", "sse", "streamable-http"]
 SERVER_NAME = "interviewkit"
 INSTRUCTIONS = (
     "Search and index a local corpus of personal work-experience notes stored in "
-    "PostgreSQL with pgvector. Call init_database once before the first ingest."
+    "PostgreSQL (pgvector + full-text). Call init_database once before the first "
+    "ingest. Use search_experiences and get_story to read stories, get_story_usage "
+    "to avoid repeating a story to a company, and prep_answer for a grounded STAR "
+    "answer; never present an answer whose grounding is 'flag' without its warning."
 )
+READ_ONLY = ToolAnnotations(read_only_hint=True, destructive_hint=False)
 
 
 def build_server() -> MCPServer:
@@ -55,13 +70,64 @@ def build_server() -> MCPServer:
     @server.tool(
         name="search_experiences",
         description=(
-            "Retrieve the experience chunks most relevant to a question, "
-            "with source files and cosine similarity scores."
+            "Hybrid (full-text + vector) search over experience chunks. Optional filters: "
+            "source_file, company and competency (from note frontmatter). "
+            "Each hit has a chunk_id and a story_id for get_story."
         ),
-        annotations=ToolAnnotations(read_only_hint=True),
+        annotations=READ_ONLY,
     )
-    async def search_experiences_tool(query: str, k: int = 5) -> list[SearchHit]:
-        return await search_experience_chunks(query, k)
+    async def search_experiences_tool(
+        query: str,
+        k: int = 5,
+        source_file: str | None = None,
+        company: str | None = None,
+        competency: str | None = None,
+        mode: RetrievalMode | None = None,
+    ) -> list[SearchHit]:
+        return await search_experience_chunks(query, k, source_file, company, competency, mode)
+
+    @server.tool(
+        name="get_story",
+        description="Return every chunk of one story by its story_id, in document order.",
+        annotations=READ_ONLY,
+    )
+    def get_story_tool(story_id: str) -> list[SearchHit]:
+        return get_story_chunks(story_id)
+
+    @server.tool(
+        name="get_company_rubric",
+        description="Return a company's interview principles from companies/<company>.md.",
+        annotations=READ_ONLY,
+    )
+    def get_company_rubric_tool(company: str) -> CompanyRubric:
+        return read_company_rubric(company)
+
+    @server.tool(
+        name="get_story_usage",
+        description="Stories already used in interviews, newest first, optionally for one company.",
+        annotations=READ_ONLY,
+    )
+    def get_story_usage_tool(company: str | None = None, limit: int = 20) -> list[StoryUsage]:
+        return read_story_usage(company, limit)
+
+    @server.tool(
+        name="prep_answer",
+        description=(
+            "Draft a STAR answer from the notes and run the deterministic grounding check. "
+            "Returns grounding pass/flag/refuse, chunk citations, and any unsupported numbers. "
+            "Calls the LLM (costs tokens); selection='agent' lets a bounded agent pick stories."
+        ),
+        annotations=ToolAnnotations(
+            read_only_hint=True, destructive_hint=False, open_world_hint=True
+        ),
+    )
+    async def prep_answer_tool(
+        question: str,
+        principle: str,
+        company: str = "",
+        selection: StorySelection | None = None,
+    ) -> PrepAnswerResult:
+        return await prep_answer(question, principle, company, selection)
 
     return server
 

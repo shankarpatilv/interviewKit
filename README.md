@@ -27,8 +27,7 @@ every cited chunk was really retrieved and every number appears in one. A
 clean answer passes, a shaky one is shown with a warning, and one with no real
 citation is replaced by "not enough context". No LLM grades another LLM.
 
-**5. `eval` keeps it honest.** Questions with known right answers run through
-steps 3 and 4, and a scorecard shows whether the right stories came back.
+**5. `eval` keeps it honest** by scoring questions with known right answers.
 
 Optional: with `STORY_SELECTION=agent`, a tool-calling agent picks the stories
 instead (max 6 tool calls). It can search again, read a whole story, and skip
@@ -68,20 +67,22 @@ and cost. Put your golden set in the git-ignored `evals/golden.jsonl` (format:
 | Two searches + grounding check (default) | 73% | 0 | 0 | $0.28 |
 | Agent (`--selection agent`) | 74% | 0 | 0 | $0.73 |
 
-The agent's extra point isn't worth 2.6x the cost, so it's opt-in ([details](resources/quality-results.md)).
+One extra point isn't worth 2.6x the cost, so the agent is opt-in ([details](resources/quality-results.md)).
 
 ## Tracing (optional)
 
 `docker compose --profile tracing up -d` starts a self-hosted
 [Langfuse](https://langfuse.com) to inspect every step, prompt, and token cost.
-Set any `pk-lf-...` / `sk-lf-...` pair as `LANGFUSE_PUBLIC_KEY` /
-`LANGFUSE_SECRET_KEY` in `.env` and open <http://localhost:3000>. Tracing is off
-without keys, and self-hosted because traces contain your private notes.
+Set any `pk-lf-...` / `sk-lf-...` pair as `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY`
+in `.env` and open <http://localhost:3000>. It's off without keys, and self-hosted
+because traces contain your private notes.
 
 ## MCP Server
 
-`interviewkit serve-mcp` exposes `init_database`, `ingest_experiences`, and
-`search_experiences` to MCP clients (`--project-dir` is required):
+`interviewkit serve-mcp` gives MCP clients read-only `search_experiences`
+(filter by file, company, or competency), `get_story`, `get_company_rubric`, and
+`get_story_usage`, plus `prep_answer`: a STAR answer with chunk citations and
+its grounding result. `--project-dir` is required:
 
 ```bash
 claude mcp add interviewkit -- /abs/path/.venv/bin/python -m interviewkit \
@@ -95,5 +96,4 @@ PostgreSQL 15 + pgvector, Langfuse, MCP, Pydantic Settings, pytest, Docker Compo
 
 ## What's Next
 
-MCP tools for reading single stories and usage history, plus a `prep_answer`
-tool that returns a grounded answer with its check status.
+Raising recall: ingest will generate the questions each story answers, since most misses are stories titled by technology but asked about by behavior.
