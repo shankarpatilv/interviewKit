@@ -8,9 +8,7 @@ from mcp.types import Tool
 
 import interviewkit.mcp_server.tools as tools
 from interviewkit.config import get_settings
-from interviewkit.ingest.embedder import EmbeddedDocument
 from interviewkit.mcp_server.server import SERVER_NAME, build_server, use_project_dir
-from interviewkit.retrieval.models import RetrievedDocument
 
 
 def _tool(name: str) -> Tool:
@@ -23,17 +21,47 @@ def test_server_registers_expected_tools() -> None:
 
     registered = {tool.name for tool in asyncio.run(server.list_tools())}
 
-    assert registered == {"init_database", "ingest_experiences", "search_experiences"}
+    assert registered == {
+        "init_database",
+        "ingest_experiences",
+        "search_experiences",
+        "get_story",
+        "get_company_rubric",
+        "get_story_usage",
+        "prep_answer",
+    }
     assert server.name == SERVER_NAME
 
 
 def test_search_tool_schema_hides_internal_settings() -> None:
     search = _tool("search_experiences")
 
-    assert set(search.input_schema["properties"]) == {"query", "k"}
+    assert set(search.input_schema["properties"]) == {
+        "query",
+        "k",
+        "source_file",
+        "company",
+        "competency",
+        "mode",
+    }
     assert search.input_schema["required"] == ["query"]
     assert search.annotations is not None
     assert search.annotations.read_only_hint is True
+
+
+@pytest.mark.parametrize("name", ["get_story", "get_company_rubric", "get_story_usage"])
+def test_story_tools_are_read_only(name: str) -> None:
+    tool = _tool(name)
+
+    assert tool.annotations is not None and tool.annotations.read_only_hint is True
+    assert "app_settings" not in tool.input_schema["properties"]
+
+
+def test_prep_answer_schema_hides_provider_and_tools() -> None:
+    prep = _tool("prep_answer")
+
+    assert set(prep.input_schema["properties"]) == {"question", "principle", "company", "selection"}
+    assert set(prep.input_schema["required"]) == {"question", "principle"}
 
 
 def test_ingest_tool_schema_exposes_optional_directory() -> None:
@@ -44,23 +72,23 @@ def test_ingest_tool_schema_exposes_optional_directory() -> None:
 
 
 def test_search_tool_call_returns_structured_hits(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def fake_embed(documents, app_settings):  # type: ignore[no-untyped-def]
-        return [EmbeddedDocument(document=documents[0], embedding=[0.3])]
+    class FakeRetriever:
+        def __init__(self, **kwargs: object) -> None:
+            assert kwargs["k"] == 1
 
-    def fake_search(embedding, *, k, app_settings):  # type: ignore[no-untyped-def]
-        assert k == 1
-        return [
-            RetrievedDocument(
-                document=Document(
+        async def ainvoke(self, query: str) -> list[Document]:
+            return [
+                Document(
                     page_content="Owned the migration end to end.",
-                    metadata={"source_file": "amazon.md"},
-                ),
-                similarity=0.88,
-            )
-        ]
+                    metadata={
+                        "source_file": "amazon.md",
+                        "chunk_id": "amazon.md:0:x",
+                        "score": 0.5,
+                    },
+                )
+            ]
 
-    monkeypatch.setattr(tools, "embed_experience_chunks", fake_embed)
-    monkeypatch.setattr(tools, "similarity_search", fake_search)
+    monkeypatch.setattr(tools, "ExperienceRetriever", FakeRetriever)
     server = build_server()
 
     result = asyncio.run(
@@ -68,7 +96,7 @@ def test_search_tool_call_returns_structured_hits(monkeypatch: pytest.MonkeyPatc
     )
 
     assert result.is_error is False
-    assert "amazon.md" in str(result.structured_content)
+    assert "amazon.md:0:x" in str(result.structured_content)
 
 
 def test_use_project_dir_reloads_settings_from_that_root(
