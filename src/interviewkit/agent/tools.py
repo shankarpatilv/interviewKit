@@ -53,10 +53,12 @@ class StoryTools:
     usage: Callable[[str], list[StoryUse]] = get_story_usage
 
     @classmethod
-    def for_settings(cls, app_settings: Settings) -> "StoryTools":
-        """Bind every tool to one settings object."""
+    def for_settings(
+        cls, app_settings: Settings, mode: RetrievalMode | None = None
+    ) -> "StoryTools":
+        """Bind every tool to one settings object (and search to one retrieval mode)."""
         return cls(
-            search=partial(search_experiences, app_settings=app_settings),
+            search=partial(search_experiences, mode=mode, app_settings=app_settings),
             story=partial(get_story, app_settings=app_settings),
             rubric=partial(get_company_rubric, app_settings=app_settings),
             usage=partial(get_story_usage, app_settings=app_settings),

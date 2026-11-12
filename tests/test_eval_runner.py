@@ -1,9 +1,9 @@
 import asyncio
+import json
 from dataclasses import dataclass, field
 
 from langchain_core.documents import Document
 
-from interviewkit.agent.story_synth import NO_MATCH_MESSAGE
 from interviewkit.config import Settings
 from interviewkit.evals.golden import ExpectedStory, GoldenCase
 from interviewkit.evals.metering import MeteredProvider, estimate_cost
@@ -11,11 +11,16 @@ from interviewkit.evals.models import Scorecard
 from interviewkit.evals.runner import run_eval
 from interviewkit.providers import Message, ProviderResponse, Tool
 
-ANSWER = (
-    "Principle: Ownership\nSituation: Our payments service was slow.\n"
-    "Action: I migrated it.\nResult: Latency dropped 40% for 6 teams, then 90% overall.\n"
-    "Sources:\n- (source: payments.md)"
+ANSWER = json.dumps(
+    {
+        "situation": "Our payments service was slow.",
+        "task": "Fix it.",
+        "action": "I migrated it.",
+        "result": "Latency dropped 40% for 6 teams, then 90% overall.",
+        "citations": ["pay:0"],
+    }
 )
+REFUSAL = json.dumps({"refused": True})
 
 
 @dataclass
@@ -55,7 +60,10 @@ def _case(case_id: str, refusal: bool = False) -> GoldenCase:
 
 def _run(provider: FakeProvider, cases: list[GoldenCase]) -> Scorecard:
     documents = [
-        Document("Cut latency 40% across six teams.", metadata={"source_file": "payments.md"}),
+        Document(
+            "Cut latency 40% across six teams.",
+            metadata={"source_file": "payments.md", "chunk_id": "pay:0"},
+        ),
         Document("Unrelated on-call story.", metadata={"source_file": "oncall.md"}),
     ]
     return asyncio.run(
@@ -77,14 +85,15 @@ def test_run_eval_scores_answered_case() -> None:
     assert result.recall == 1.0
     assert result.groundedness == 1.0
     assert result.unsupported_numbers == ("90%",)
+    assert result.grounding == "flag"
+    assert scorecard.flagged == 1
     assert result.refusal_correct
     assert (result.input_tokens, result.output_tokens) == (1000, 200)
     assert result.cost_usd == estimate_cost("gpt-4o", 1000, 200)
 
 
 def test_run_eval_scores_refusal_and_false_refusal() -> None:
-    refusal = f"Principle: Ownership\n{NO_MATCH_MESSAGE}\nSources:\n- none"
-    scorecard = _run(FakeProvider([refusal]), [_case("refuse", True), _case("miss")])
+    scorecard = _run(FakeProvider([REFUSAL]), [_case("refuse", True), _case("miss")])
 
     assert [case.refusal_correct for case in scorecard.cases] == [True, False]
     assert scorecard.false_refusals == 1
@@ -123,3 +132,65 @@ def test_estimate_cost_prices_cached_tokens_like_langfuse() -> None:
 
 def test_estimate_cost_caps_cached_at_input() -> None:
     assert estimate_cost("gpt-4o", 100, 0, cached_input_tokens=500) == 100 * 1.25 / 1e6
+
+
+def test_unknown_citation_lowers_chunk_groundedness() -> None:
+    reply = json.loads(ANSWER) | {"citations": ["pay:0", "made-up"], "result": "Cut 40%."}
+    scorecard = _run(FakeProvider([json.dumps(reply)]), [_case("own-1")])
+
+    result = scorecard.cases[0]
+    assert result.groundedness == 0.5
+    assert result.grounding == "flag"
+
+
+def test_run_eval_agent_selection_counts_tool_calls() -> None:
+    from interviewkit.agent.tools import StoryTools
+    from interviewkit.providers import ToolCall
+
+    doc = Document(
+        "Cut latency 40% across six teams.",
+        metadata={"source_file": "payments.md", "chunk_id": "pay:0"},
+    )
+
+    async def search(query: str, k: int = 5) -> list[Document]:
+        return [doc]
+
+    replies = iter(
+        [
+            ProviderResponse(
+                "",
+                "openai",
+                "gpt-4o",
+                tool_calls=(ToolCall("1", "search_experiences", {"query": "q"}),),
+            ),
+            ProviderResponse(
+                "",
+                "openai",
+                "gpt-4o",
+                tool_calls=(ToolCall("2", "select_chunks", {"chunk_ids": ["pay:0"]}),),
+            ),
+            ProviderResponse(ANSWER.replace(", then 90% overall", ""), "openai", "gpt-4o"),
+        ]
+    )
+
+    class ScriptedProvider:
+        async def complete(
+            self, messages: list[Message], tools: list[Tool] | None = None
+        ) -> ProviderResponse:
+            return next(replies)
+
+    scorecard = asyncio.run(
+        run_eval(
+            [_case("own-1")],
+            k=2,
+            selection="agent",
+            provider=ScriptedProvider(),
+            tools=StoryTools(search=search),
+            app_settings=Settings(_env_file=None),
+        )
+    )
+
+    result = scorecard.cases[0]
+    assert result.error is None and result.tool_calls == 1
+    assert result.recall == 1.0 and result.grounding == "pass"
+    assert scorecard.selection == "agent"

@@ -20,9 +20,16 @@ def test_star_synthesis_prompt_defines_required_contract() -> None:
     assert "Company principle or competency" in prompt
     assert "Retrieved experience chunks" in prompt
     assert "Do not invent projects" in prompt
-    assert "I do not have enough relevant experience context" in prompt
-    assert "Situation:" in prompt
-    assert "Task:" in prompt
-    assert "Action:" in prompt
-    assert "Result:" in prompt
-    assert "(source: source-file.md)" in prompt
+    assert '"refused"' in prompt
+    for field in ('"situation"', '"task"', '"action"', '"result"', '"citations"'):
+        assert field in prompt
+    assert "chunk_id" in prompt
+
+
+def test_story_selector_prompt_formats_limits() -> None:
+    prompt = (PROMPTS_DIR / "story_selector.txt").read_text(encoding="utf-8")
+
+    formatted = prompt.format(k=5, max_tool_calls=6)
+
+    assert "at most 5 chunk_ids" in formatted and "at most 6 tool calls" in formatted
+    assert "get_story_usage" in formatted

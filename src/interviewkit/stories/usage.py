@@ -58,9 +58,7 @@ def list_uses(
     """Return recent story uses, newest first, optionally for one company."""
     key = normalize_company(company) if company is not None else None
     rows = _execute(LIST_STORY_USES_SQL, (key, key, limit), app_settings, connect, fetch=True)
-    return [
-        StoryUse(*cast(tuple[str, str, str | None, datetime], row)) for row in rows
-    ]
+    return [StoryUse(*cast(tuple[str, str, str | None, datetime], row)) for row in rows]
 
 
 def is_repeat(

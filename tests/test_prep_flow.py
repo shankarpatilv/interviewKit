@@ -22,7 +22,10 @@ def test_run_prep_writes_session_file(
         assert "Ownership" in company_principles
         return [GeneratedQuestion(principle="Ownership", text="Tell me about ownership.")]
 
-    async def fake_answer(question: GeneratedQuestion) -> StarAnswer:
+    async def fake_answer(
+        question: GeneratedQuestion, company: str, selector: object
+    ) -> StarAnswer:
+        assert company == "amazon" and selector is None
         assert question.text == "Tell me about ownership."
         return StarAnswer(
             principle="Ownership",

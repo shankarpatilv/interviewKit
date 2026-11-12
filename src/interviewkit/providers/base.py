@@ -1,10 +1,20 @@
 """Shared provider abstractions."""
 
-from dataclasses import dataclass
-from typing import Protocol
+from dataclasses import dataclass, field
+from typing import Any, Protocol
 
-Message = dict[str, str]
+# Chat messages use the OpenAI shape; tool-call turns carry non-string values.
+Message = dict[str, Any]
 Tool = dict[str, object]
+
+
+@dataclass(frozen=True)
+class ToolCall:
+    """One tool call requested by the model."""
+
+    id: str
+    name: str
+    arguments: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -17,6 +27,7 @@ class ProviderResponse:
     input_tokens: int = 0
     output_tokens: int = 0
     cached_input_tokens: int = 0  # subset of input_tokens billed at the cache rate
+    tool_calls: tuple[ToolCall, ...] = ()
 
 
 class ProviderError(RuntimeError):
