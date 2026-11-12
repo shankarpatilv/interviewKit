@@ -114,3 +114,12 @@ def test_metered_provider_resets_usage() -> None:
 def test_estimate_cost_unknown_model_is_zero() -> None:
     assert estimate_cost("mystery-model", 1000, 1000) == 0.0
     assert estimate_cost("gpt-4o", 1_000_000, 0) == 2.50
+
+
+def test_estimate_cost_prices_cached_tokens_like_langfuse() -> None:
+    # Real GPT-4o call observed in Langfuse: 2454 input (2304 cached), 13 output.
+    assert round(estimate_cost("gpt-4o", 2454, 13, cached_input_tokens=2304), 6) == 0.003385
+
+
+def test_estimate_cost_caps_cached_at_input() -> None:
+    assert estimate_cost("gpt-4o", 100, 0, cached_input_tokens=500) == 100 * 1.25 / 1e6

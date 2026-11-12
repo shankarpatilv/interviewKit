@@ -90,6 +90,7 @@ def _with_usage(result: CaseResult, latency_s: float, metered: MeteredProvider) 
             "latency_s": latency_s,
             "input_tokens": metered.input_tokens,
             "output_tokens": metered.output_tokens,
+            "cached_input_tokens": metered.cached_input_tokens,
             "cost_usd": metered.cost_usd,
         }
     )

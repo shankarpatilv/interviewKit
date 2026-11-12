@@ -16,6 +16,7 @@ class ProviderResponse:
     model: str
     input_tokens: int = 0
     output_tokens: int = 0
+    cached_input_tokens: int = 0  # subset of input_tokens billed at the cache rate
 
 
 class ProviderError(RuntimeError):
