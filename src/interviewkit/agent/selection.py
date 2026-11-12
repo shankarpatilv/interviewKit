@@ -1,6 +1,8 @@
 """Bounded tool-calling subgraph that picks stories for one question.
 
-start -> agent <-> run_tools -> finish. The agent may call search, story,
+start -> agent <-> run_tools -> finish. `start` seeds the conversation with
+the fixed pipeline's search for the question, so the agent can only add to
+what the pipeline would have found. The agent may then call search, story,
 usage, and rubric tools, then finishes with `select_chunks`. A hard tool-call
 budget and turn limit keep it from looping; when the budget runs out it is
 offered only `select_chunks`, and `finish` falls back to the best chunks it saw.
@@ -95,13 +97,13 @@ def build_selection_graph(provider: LLMProvider, tools: StoryTools, k: int = 5) 
     async def tools_node(state: SelectionState) -> SelectionState:
         return await _run_tools(state, tools)
 
-    async def finish_node(state: SelectionState) -> SelectionState:
-        return await _finish(state, tools, k)
+    async def start_node(state: SelectionState) -> SelectionState:
+        return await _start(state, tools, k)
 
-    graph.add_node("start", lambda state: _start(state, k))
+    graph.add_node("start", start_node)
     graph.add_node("agent", agent_node)
     graph.add_node("run_tools", tools_node)
-    graph.add_node("finish", finish_node)
+    graph.add_node("finish", lambda state: _finish(state, k))
     graph.add_edge(START, "start")
     graph.add_edge("start", "agent")
     graph.add_conditional_edges("agent", _route, {"run_tools": "run_tools", "finish": "finish"})
@@ -127,21 +129,33 @@ def agent_selector(provider: LLMProvider, tools: StoryTools, k: int = 5) -> Stor
     return select
 
 
-def _start(state: SelectionState, k: int) -> SelectionState:
+async def _start(state: SelectionState, tools: StoryTools, k: int) -> SelectionState:
     prompt = PROMPT_PATH.read_text(encoding="utf-8").format(k=k, max_tool_calls=MAX_TOOL_CALLS)
     user = (
         f"Company: {state.get('company') or 'unknown'}\n"
         f"Principle: {state['principle']}\n"
         f"Question: {state['question']}"
     )
+    seed = ToolCall("seed", "search_experiences", {"query": _pipeline_query(state), "k": k})
+    seen: dict[str, Document] = {}
+    hits = _remember(await tools.search(str(seed.arguments["query"]), k=k), seen)
     return {
-        "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": user}],
+        "messages": [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": user},
+            _assistant_message("", (seed,)),
+            {"role": "tool", "tool_call_id": seed.id, "content": json.dumps(hits, default=str)},
+        ],
         "pending": [],
-        "seen": {},
+        "seen": seen,
         "selected": None,
-        "tool_calls": 0,
+        "tool_calls": 1,
         "turns": 0,
     }
+
+
+def _pipeline_query(state: SelectionState) -> str:
+    return f"{state['principle']}\n{state['question']}"
 
 
 async def _agent_turn(state: SelectionState, provider: LLMProvider) -> SelectionState:
@@ -226,7 +240,7 @@ def _remember(docs: list[Document], seen: dict[str, Document]) -> list[dict[str,
     return hits
 
 
-async def _finish(state: SelectionState, tools: StoryTools, k: int) -> SelectionState:
+def _finish(state: SelectionState, k: int) -> SelectionState:
     seen = state.get("seen", {})
     selected = state.get("selected")
     used = state.get("tool_calls", 0)
@@ -234,10 +248,8 @@ async def _finish(state: SelectionState, tools: StoryTools, k: int) -> Selection
         chunks = [seen[i] for i in dict.fromkeys(selected) if i in seen][:k]
         if chunks or not selected:
             return {"retrieved_chunks": chunks, "tool_calls": used}
-    if seen:  # no usable selection: fall back to the best chunks the tools returned
-        return {"retrieved_chunks": list(seen.values())[:k], "tool_calls": used}
-    query = f"{state['principle']}\n{state['question']}"
-    return {"retrieved_chunks": await tools.search(query, k=k), "tool_calls": used + 1}
+    # No usable selection: fall back to the best chunks the tools returned.
+    return {"retrieved_chunks": list(seen.values())[:k], "tool_calls": used}
 
 
 def _assistant_message(content: str, calls: tuple[ToolCall, ...]) -> Message:

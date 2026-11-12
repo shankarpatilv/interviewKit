@@ -191,6 +191,6 @@ def test_run_eval_agent_selection_counts_tool_calls() -> None:
     )
 
     result = scorecard.cases[0]
-    assert result.error is None and result.tool_calls == 1
+    assert result.error is None and result.tool_calls == 2  # seed + one search
     assert result.recall == 1.0 and result.grounding == "pass"
     assert scorecard.selection == "agent"

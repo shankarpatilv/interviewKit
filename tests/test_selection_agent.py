@@ -71,13 +71,24 @@ def test_agent_searches_checks_usage_and_selects_unused_story() -> None:
 
     result = _run(provider, log)
 
-    assert log == ["search:ownership:5", "usage:amazon"]
+    assert log == ["search:Ownership\nQ?:5", "search:ownership:5", "usage:amazon"]
     assert result["retrieved_chunks"] == [B]
-    assert result["tool_calls"] == 2
+    assert result["tool_calls"] == 3
     tool_messages = [m for m in provider.messages[1] if m["role"] == "tool"]
-    assert [m["tool_call_id"] for m in tool_messages] == ["1", "2"]
-    assert '"story_id": "a/x"' in tool_messages[1]["content"]
-    assert provider.messages[1][2]["tool_calls"][0]["function"]["name"] == "search_experiences"
+    assert [m["tool_call_id"] for m in tool_messages] == ["seed", "1", "2"]
+    assert '"story_id": "a/x"' in tool_messages[2]["content"]
+    assert provider.messages[1][4]["tool_calls"][0]["function"]["name"] == "search_experiences"
+
+
+def test_seed_search_is_in_context_before_first_turn() -> None:
+    provider = Scripted((call("1", "select_chunks", chunk_ids=["a:0"]),))
+
+    result = _run(provider, [])
+
+    first = provider.messages[0]
+    assert first[2]["tool_calls"][0]["id"] == "seed"
+    assert '"chunk_id": "a:0"' in first[3]["content"]
+    assert result["retrieved_chunks"] == [A] and result["tool_calls"] == 1
 
 
 def test_budget_exhaustion_offers_only_select_then_falls_back_to_seen() -> None:
@@ -93,7 +104,7 @@ def test_budget_exhaustion_offers_only_select_then_falls_back_to_seen() -> None:
     budget_errors = [
         m for m in provider.messages[-1] if "budget exhausted" in str(m.get("content"))
     ]
-    assert len(budget_errors) == 2
+    assert len(budget_errors) == 3  # 1 seed + 5 of 8 requested fit the budget
     assert result["retrieved_chunks"] == [A]
 
 
@@ -104,7 +115,7 @@ def test_turn_limit_ends_the_loop() -> None:
     result = _run(provider, log)
 
     assert len(provider.offered) == selection.MAX_AGENT_TURNS
-    assert result["retrieved_chunks"] == [B]
+    assert result["retrieved_chunks"] == [A, B]
 
 
 def test_explicit_empty_selection_returns_no_chunks() -> None:
@@ -151,4 +162,4 @@ def test_agent_selector_returns_chunks_and_count() -> None:
 
     update = asyncio.run(select({"question": "Q?", "principle": "P"}))
 
-    assert update == {"retrieved_chunks": [], "tool_calls": 0}
+    assert update == {"retrieved_chunks": [], "tool_calls": 1}

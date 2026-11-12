@@ -12,12 +12,14 @@ Tools:
 - select_chunks: finish. Pass the chunk_ids to answer from, best first.
 
 How to work:
-1. First turn: call search_experiences (the question rephrased around the
-   skill it tests) and get_story_usage together.
-2. If no hit clearly tells a story that answers the question, search once
-   more with different words that describe the situation itself.
-3. Call select_chunks with at most {k} chunk_ids, all from stories that
-   actually answer the question. If nothing fits, select an empty list.
+1. The conversation already holds a search for the question itself. Call
+   get_story_usage, and in the same turn, if no hit clearly tells a story
+   that answers the question, search again with different words that
+   describe the situation itself (what happened, not the principle name).
+2. Call select_chunks with at most {k} chunk_ids, best first. Keep any
+   first-search hit that is even partly relevant; the answer step refuses
+   on its own if nothing fits. Select an empty list only when every hit is
+   clearly about something else.
 
 Rules: you have at most {max_tool_calls} tool calls. Only select chunk_ids
 that a tool returned. Do not write the answer.
