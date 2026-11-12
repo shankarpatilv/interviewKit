@@ -49,16 +49,13 @@ LLM grading another LLM:
 - **Metric fidelity**: does every number in the answer appear in a cited chunk?
 - **Refusal accuracy**: did it refuse exactly when there was no matching story?
 
-It also reports latency and estimated cost. Your real golden set goes in
-`evals/golden.jsonl`, which is git-ignored. `evals/golden.example.jsonl` shows
-the format.
+It also reports latency and cost. Put your golden set in the git-ignored
+`evals/golden.jsonl` (format: `evals/golden.example.jsonl`), then run
+`interviewkit eval --golden evals/golden.jsonl --mode hybrid`.
 
-```bash
-interviewkit eval --golden evals/golden.jsonl --k 5
-```
-
-Current baseline on 40 cases (vector search only): 77% recall@5, 0 unsupported
-numbers, 95% refusal accuracy. Details in `resources/quality-baseline.md`.
+Retrieval is hybrid by default: pgvector similarity plus Postgres full-text
+search, merged with reciprocal rank fusion. On 40 cases it lifted story-level
+recall@5 from 56% to 73% with 0 unsupported numbers (`resources/quality-results.md`).
 
 ## Tracing (optional)
 
@@ -96,6 +93,6 @@ MCP, Pydantic Settings, pytest, Docker Compose.
 
 ## What's Next
 
-Hybrid retrieval (Postgres full-text plus vector search), story-level metadata,
-and a bounded agent for story selection with a deterministic grounding check.
+A bounded agent for story selection that avoids reusing stories, followed by a
+deterministic grounding check on every answer.
 Each change is measured against the golden set.

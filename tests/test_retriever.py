@@ -27,7 +27,7 @@ def test_experience_retriever_invokes_search_with_query_embedding() -> None:
             )
         ]
 
-    retriever = ExperienceRetriever(k=3, query_embedder=embed_query, search=search)
+    retriever = ExperienceRetriever(mode="vector", k=3, query_embedder=embed_query, search=search)
 
     documents = retriever.invoke("Tell me about Bedrock")
 
@@ -51,7 +51,9 @@ def test_experience_retriever_supports_async_invoke() -> None:
                 )
             ]
 
-        retriever = ExperienceRetriever(k=1, query_embedder=embed_query, search=search)
+        retriever = ExperienceRetriever(
+            mode="vector", k=1, query_embedder=embed_query, search=search
+        )
 
         documents = await retriever.ainvoke("ownership")
 
@@ -66,7 +68,9 @@ def test_experience_retriever_returns_empty_list_when_search_has_no_matches() ->
         async def embed_query(query: str) -> list[float]:
             return []
 
-        retriever = ExperienceRetriever(query_embedder=embed_query, search=lambda embedding, k: [])
+        retriever = ExperienceRetriever(
+            mode="vector", query_embedder=embed_query, search=lambda embedding, k: []
+        )
 
         documents = await retriever.ainvoke("empty")
 
@@ -90,7 +94,7 @@ def test_experience_retriever_default_embedder_converts_query_to_embedding(
             return []
 
         monkeypatch.setattr(retriever_module, "embed_experience_chunks", embed_chunks)
-        retriever = ExperienceRetriever(k=2, search=search)
+        retriever = ExperienceRetriever(mode="vector", k=2, search=search)
 
         documents = await retriever.ainvoke("ambiguity")
 

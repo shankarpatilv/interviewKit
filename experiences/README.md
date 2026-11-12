@@ -25,6 +25,13 @@ Start from `_template.md` and fill in enough detail for a STAR answer:
 - lessons learned
 - interview themes the story supports
 
+Give each story its own `###` heading under a `##` section. Every `###` becomes
+its own retrieval chunk with a stable `story_id`, and its headings are kept in
+the chunk text so search can match the story title.
+
+Optional frontmatter (`company`, `role`, `timeframe`, `competencies`) at the top
+of a file is copied onto every chunk and can be used as a retrieval filter.
+
 ## Why Detail Matters
 
 InterviewKit stores each section as searchable context. A note that says

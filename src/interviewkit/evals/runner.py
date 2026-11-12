@@ -10,7 +10,7 @@ from langchain_core.documents import Document
 from interviewkit.agent.story_synth import StarAnswer, build_story_graph
 from interviewkit.agent.story_synth_context import source_files
 from interviewkit.agent.story_synth_models import ExperienceSearch
-from interviewkit.config import Settings, get_settings
+from interviewkit.config import RetrievalMode, Settings, get_settings
 from interviewkit.evals.golden import GoldenCase
 from interviewkit.evals.metering import MeteredProvider
 from interviewkit.evals.metrics import (
@@ -32,7 +32,7 @@ async def run_eval(
     cases: Sequence[GoldenCase],
     *,
     k: int = 5,
-    mode: str = "vector",
+    mode: RetrievalMode = "hybrid",
     provider: LLMProvider | None = None,
     retriever: ExperienceSearch | None = None,
     app_settings: Settings | None = None,
@@ -41,7 +41,7 @@ async def run_eval(
     settings = app_settings or get_settings()
     metered = MeteredProvider(provider or get_provider())
     resolved_retriever = retriever or cast(
-        ExperienceSearch, ExperienceRetriever(k=k, app_settings=settings)
+        ExperienceSearch, ExperienceRetriever(k=k, mode=mode, app_settings=settings)
     )
     graph = build_story_graph(provider=metered, retriever=resolved_retriever)
     results = []
