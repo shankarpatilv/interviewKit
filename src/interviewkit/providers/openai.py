@@ -61,4 +61,8 @@ class OpenAIProvider:
             model=self._model,
             input_tokens=getattr(usage, "prompt_tokens", 0) or 0,
             output_tokens=getattr(usage, "completion_tokens", 0) or 0,
+            cached_input_tokens=getattr(
+                getattr(usage, "prompt_tokens_details", None), "cached_tokens", 0
+            )
+            or 0,
         )

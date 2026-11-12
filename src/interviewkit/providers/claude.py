@@ -48,12 +48,14 @@ class ClaudeProvider:
             raise ProviderAPIError("Claude API call failed") from exc
 
         usage = getattr(response, "usage", None)
+        cached = getattr(usage, "cache_read_input_tokens", 0) or 0
         return ProviderResponse(
             content=_extract_text(response),
             provider="claude",
             model=self._model,
-            input_tokens=getattr(usage, "input_tokens", 0) or 0,
+            input_tokens=(getattr(usage, "input_tokens", 0) or 0) + cached,
             output_tokens=getattr(usage, "output_tokens", 0) or 0,
+            cached_input_tokens=cached,
         )
 
     def _build_client(self) -> Any:
