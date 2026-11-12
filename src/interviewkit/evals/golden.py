@@ -23,6 +23,7 @@ class ExpectedStory(BaseModel):
 
     source_file: str = Field(min_length=1)
     header_2: str | None = None
+    story_id: str | None = None  # when set, match on chunk story_id instead of header_2
 
 
 class GoldenCase(BaseModel):

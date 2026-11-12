@@ -158,3 +158,38 @@ def test_similarity_search_returns_ranked_documents_with_metadata() -> None:
     assert results[0].document.metadata == {"header_1": "Amazon", "source_file": "amazon.md"}
     assert results[0].similarity == 0.91
     assert connection.committed is True
+
+
+def _chunk(text: str) -> EmbeddedDocument:
+    return EmbeddedDocument(
+        document=Document(page_content=text, metadata={"source_file": "a.md"}),
+        embedding=[0.1],
+    )
+
+
+def test_upsert_chunks_prunes_rows_not_in_batch_in_same_transaction() -> None:
+    from interviewkit.retrieval.schema import PRUNE_CHUNKS_SQL
+
+    connection = make_connection()
+    settings = Settings(database_url="postgresql://example.test/interviewkit", _env_file=None)
+
+    vectorstore.upsert_chunks(
+        [_chunk("one"), _chunk("two")], settings, connect=lambda _: connection, prune=True
+    )
+
+    statements = connection.cursor_instance.statements
+    assert statements[-1][0] == PRUNE_CHUNKS_SQL
+    kept_ids = statements[-1][1][0]  # type: ignore[index]
+    assert kept_ids == [statements[0][1][0], statements[1][1][0]]  # type: ignore[index]
+    assert connection.committed is True
+
+
+def test_upsert_chunks_does_not_prune_by_default() -> None:
+    from interviewkit.retrieval.schema import PRUNE_CHUNKS_SQL
+
+    connection = make_connection()
+    settings = Settings(database_url="postgresql://example.test/interviewkit", _env_file=None)
+
+    vectorstore.upsert_chunks([_chunk("one")], settings, connect=lambda _: connection)
+
+    assert all(query != PRUNE_CHUNKS_SQL for query, _ in connection.cursor_instance.statements)

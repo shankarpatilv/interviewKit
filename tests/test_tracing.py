@@ -121,3 +121,7 @@ def test_trace_run_opens_root_span_with_attributes(monkeypatch: pytest.MonkeyPat
         ("attrs", {"trace_name": "eval:c1", "tags": ["eval"], "metadata": {"k": "5"}}),
         ("body", None),
     ]
+
+
+def test_tracing_disabled_when_a_key_is_blank() -> None:
+    assert not _settings(LANGFUSE_PUBLIC_KEY="", LANGFUSE_SECRET_KEY="sk-lf-x").tracing_enabled

@@ -42,6 +42,10 @@ ON CONFLICT (id) DO UPDATE SET
     embedding = EXCLUDED.embedding
 """
 
+PRUNE_CHUNKS_SQL = """
+DELETE FROM experiences WHERE NOT (id = ANY(%s))
+"""
+
 SIMILARITY_SEARCH_SQL = """
 SELECT source_file, chunk_text, chunk_meta, 1 - (embedding <=> %s::vector) AS similarity
 FROM experiences
