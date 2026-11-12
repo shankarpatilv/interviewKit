@@ -94,3 +94,18 @@ def test_metric_fidelity() -> None:
     answer = "Result: cut latency 40% across 6 services, saving $1M.\nSources:\n- (source: a.md)"
     assert metric_fidelity(answer, chunks) == ["$1M"]
     assert metric_fidelity(NO_MATCH_MESSAGE + " 42", []) == []
+
+
+def test_story_matches_uses_story_id_when_set() -> None:
+    from interviewkit.evals.metrics import story_matches
+
+    expected = ExpectedStory(source_file="a.md", story_id="a/decisions/dynamodb-over-rds")
+    hit = Document(
+        "x", metadata={"source_file": "a.md", "story_id": "a/decisions/dynamodb-over-rds"}
+    )
+    miss = Document(
+        "x", metadata={"source_file": "a.md", "story_id": "a/decisions/failure-handling"}
+    )
+
+    assert story_matches(expected, hit)
+    assert not story_matches(expected, miss)

@@ -71,7 +71,8 @@ class Settings(BaseSettings):
     @property
     def tracing_enabled(self) -> bool:
         """Return True only when both Langfuse keys are configured."""
-        return self.langfuse_public_key is not None and self.langfuse_secret_key is not None
+        keys = (self.langfuse_public_key, self.langfuse_secret_key)
+        return all(key is not None and key.get_secret_value() for key in keys)
 
     def provider_api_key(self, provider: ProviderName | None = None) -> SecretStr:
         """Return the configured API key for a provider or raise a clear error."""

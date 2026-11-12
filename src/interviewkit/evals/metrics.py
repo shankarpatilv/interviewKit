@@ -22,6 +22,8 @@ def story_matches(expected: ExpectedStory, document: Document) -> bool:
     """Return True when a retrieved document is the expected story."""
     if document.metadata.get("source_file") != expected.source_file:
         return False
+    if expected.story_id is not None:
+        return document.metadata.get("story_id") == expected.story_id
     if expected.header_2 is None:
         return True
     actual = document.metadata.get("header_2")

@@ -6,7 +6,12 @@ from interviewkit.retrieval.connection import ConnectFactory, default_connect
 from interviewkit.retrieval.models import RetrievedDocument
 from interviewkit.retrieval.records import chunk_params, numbered_chunks, row_to_retrieved_document
 from interviewkit.retrieval.records import vector_literal
-from interviewkit.retrieval.schema import SCHEMA_STATEMENTS, SIMILARITY_SEARCH_SQL, UPSERT_CHUNK_SQL
+from interviewkit.retrieval.schema import (
+    PRUNE_CHUNKS_SQL,
+    SCHEMA_STATEMENTS,
+    SIMILARITY_SEARCH_SQL,
+    UPSERT_CHUNK_SQL,
+)
 
 
 def init_db(
@@ -33,18 +38,22 @@ def upsert_chunks(
     chunks: list[EmbeddedDocument],
     app_settings: Settings | None = None,
     connect: ConnectFactory = default_connect,
+    prune: bool = False,
 ) -> None:
-    """Insert or update embedded chunks in pgvector storage."""
+    """Insert or update chunks; with `prune`, delete rows not in this batch."""
     resolved_settings = app_settings or get_settings()
     connection = connect(resolved_settings.database_url)
 
     try:
         with connection.cursor() as cursor:
-            for chunk_id, chunk in numbered_chunks(chunks):
+            numbered = numbered_chunks(chunks)
+            for chunk_id, chunk in numbered:
                 cursor.execute(
                     UPSERT_CHUNK_SQL,
                     chunk_params(chunk_id, chunk),
                 )
+            if prune:
+                cursor.execute(PRUNE_CHUNKS_SQL, ([chunk_id for chunk_id, _ in numbered],))
         connection.commit()
     except Exception:
         connection.rollback()
