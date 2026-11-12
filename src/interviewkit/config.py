@@ -9,6 +9,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ProviderName = Literal["claude", "openai"]
 RetrievalMode = Literal["vector", "hybrid"]
+StorySelection = Literal["pipeline", "agent"]
 
 
 class Settings(BaseSettings):
@@ -60,6 +61,10 @@ class Settings(BaseSettings):
     retrieval_mode: RetrievalMode = Field(
         default="hybrid",
         validation_alias=AliasChoices("RETRIEVAL_MODE", "INTERVIEWKIT_RETRIEVAL_MODE"),
+    )
+    story_selection: StorySelection = Field(
+        default="pipeline",
+        validation_alias=AliasChoices("STORY_SELECTION", "INTERVIEWKIT_STORY_SELECTION"),
     )
     experiences_dir: Path = Path("experiences")
     companies_dir: Path = Path("companies")

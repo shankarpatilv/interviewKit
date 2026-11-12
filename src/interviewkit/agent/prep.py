@@ -4,7 +4,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from interviewkit.agent.question_gen import GeneratedQuestion, generate_interview_questions
-from interviewkit.agent.story_synth import StarAnswer, synthesize_star_answer
+from interviewkit.agent.selection import agent_selector
+from interviewkit.agent.story_synth import StarAnswer, StorySelector, synthesize_star_answer
+from interviewkit.agent.tools import StoryTools
+from interviewkit.providers import get_provider
 from interviewkit.config import Settings, get_settings
 from interviewkit.sessions import AnsweredQuestion, render_session_markdown
 from interviewkit.sessions import write_session_markdown
@@ -35,10 +38,13 @@ async def run_prep(
     company_path = resolved_settings.companies_dir / f"{company}.md"
     company_principles = _read_required_file(company_path, "Company profile")
     questions = await generate_interview_questions(job_description, company_principles)
+    selector = None
+    if resolved_settings.story_selection == "agent":
+        selector = agent_selector(get_provider(), StoryTools.for_settings(resolved_settings))
     answers = [
         AnsweredQuestion(
             question=question,
-            answer=await _answer_question(question),
+            answer=await _answer_question(question, company, selector),
         )
         for question in questions
     ]
@@ -52,10 +58,14 @@ async def run_prep(
     )
 
 
-async def _answer_question(question: GeneratedQuestion) -> StarAnswer:
+async def _answer_question(
+    question: GeneratedQuestion, company: str, selector: StorySelector | None
+) -> StarAnswer:
     return await synthesize_star_answer(
         question=question.text,
         principle=question.principle,
+        company=company,
+        selector=selector,
     )
 
 

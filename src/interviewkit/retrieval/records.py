@@ -35,16 +35,23 @@ def chunk_params(chunk_id_value: str, chunk: EmbeddedDocument) -> tuple[str, str
 
 
 def row_to_retrieved_document(row: object) -> RetrievedDocument:
-    """Convert a database row into a retrieved LangChain document."""
+    """Convert a database row into a retrieved LangChain document.
+
+    Rows are `(source_file, chunk_text, chunk_meta, score[, id])`; when the id
+    is present it is stored as `chunk_id` metadata so answers can cite it.
+    """
+    values = cast(tuple[object, ...], row)
     source_file, chunk_text, chunk_meta, similarity = cast(
         tuple[str, str, dict[str, object], float],
-        row,
+        values[:4],
     )
     metadata = chunk_meta.copy()
     metadata["source_file"] = source_file
+    if len(values) > 4:
+        metadata["chunk_id"] = values[4]
     return RetrievedDocument(
         document=Document(page_content=chunk_text, metadata=metadata),
-        similarity=similarity,
+        similarity=float(similarity),
     )
 
 

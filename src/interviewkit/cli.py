@@ -8,13 +8,14 @@ import typer
 
 from interviewkit.agent.prep import PrepError, run_prep
 from interviewkit import __version__
-from interviewkit.config import RetrievalMode, Settings, get_settings
+from interviewkit.config import RetrievalMode, Settings, StorySelection, get_settings
 from interviewkit.evals.golden import GoldenSetError, load_golden_set
 from interviewkit.evals.report import render_scorecard, write_scorecard_json
 from interviewkit.evals.runner import run_eval
 from interviewkit.ingest.pipeline import ingest_experiences
 from interviewkit.mcp_server.server import Transport, run_server
 from interviewkit.retrieval.vectorstore import init_db
+from interviewkit.stories.usage import list_uses, log_use
 
 app = typer.Typer(
     help="Prepare company-specific behavioral interviews from your experience notes.",
@@ -85,17 +86,29 @@ def eval_command(
     ),
     k: int = typer.Option(5, "--k", min=1, max=20, help="Chunks retrieved per question."),
     mode: str = typer.Option("hybrid", "--mode", help="Retrieval mode: hybrid or vector."),
+    selection: str = typer.Option(
+        "pipeline", "--selection", help="Story selection: pipeline or agent."
+    ),
     save: bool = typer.Option(True, "--save/--no-save", help="Write a JSON scorecard."),
 ) -> None:
     """Score retrieval and answers against a golden set."""
     if mode not in ("vector", "hybrid"):
         raise typer.BadParameter("Use 'vector' or 'hybrid'.", param_hint="--mode")
+    if selection not in ("pipeline", "agent"):
+        raise typer.BadParameter("Use 'pipeline' or 'agent'.", param_hint="--selection")
     try:
         cases = load_golden_set(golden)
     except GoldenSetError as exc:
         raise typer.BadParameter(str(exc), param_hint="--golden") from exc
 
-    scorecard = asyncio.run(run_eval(cases, k=k, mode=cast(RetrievalMode, mode)))
+    scorecard = asyncio.run(
+        run_eval(
+            cases,
+            k=k,
+            mode=cast(RetrievalMode, mode),
+            selection=cast(StorySelection, selection),
+        )
+    )
     typer.echo(render_scorecard(scorecard))
     if save:
         path = write_scorecard_json(scorecard, get_settings().sessions_dir)
@@ -125,10 +138,22 @@ def serve_mcp(
 @app.command()
 def log(
     company: str = typer.Option(..., "--company", help="Company name."),
-    story: str = typer.Option(..., "--story", help="Story identifier used in an interview."),
+    story: str | None = typer.Option(None, "--story", help="Story ID to log."),
+    question: str | None = typer.Option(None, "--question", help="Question it answered."),
+    show: bool = typer.Option(False, "--list", help="List past uses instead of logging."),
 ) -> None:
-    """Record that a story was used for an interview."""
-    typer.echo(f"Story logging is not implemented yet: company={company}, story={story}")
+    """Record that a story was used with a company, or list past uses."""
+    if show:
+        for use in list_uses(company):
+            typer.echo(f"{use.used_at:%Y-%m-%d}  {use.story_id}  {use.question or ''}".rstrip())
+        return
+    if story is None:
+        raise typer.BadParameter("Pass --story, or --list to see past uses.")
+    try:
+        log_use(company, story, question)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo(f"Logged {story} for {company.strip().lower()}.")
 
 
 @app.command()

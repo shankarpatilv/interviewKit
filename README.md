@@ -20,12 +20,19 @@ GPT-4o reads the company's principles and writes 5 to 8 likely questions. For
 each one, InterviewKit runs two searches: one for chunks that *mean* something
 similar, one for chunks that share the *words*. It merges the two lists by
 rank, so a story both searches like rises to the top, and hands the best five
-to GPT-4o. GPT-4o writes a STAR answer from those chunks only and cites the
-files it used. If nothing fits, it says so instead of making something up.
+to GPT-4o, which writes a STAR answer and cites the exact chunks it used.
 
-**4. `eval` keeps it honest.** A set of questions with known right answers runs
-through step 3, and a scorecard shows whether the right stories came back and
-whether every citation and number in the answers traces to your notes.
+**4. Code checks the answer.** Before you see it, InterviewKit checks that
+every cited chunk was really retrieved and every number appears in one. A
+clean answer passes, a shaky one is shown with a warning, and one with no real
+citation is replaced by "not enough context". No LLM grades another LLM.
+
+**5. `eval` keeps it honest.** Questions with known right answers run through
+steps 3 and 4, and a scorecard shows whether the right stories came back.
+
+Optional: with `STORY_SELECTION=agent`, a tool-calling agent picks the stories
+instead (max 6 tool calls). It can search again, read a whole story, and skip
+stories you already told that company (`interviewkit log`).
 
 ## Quickstart
 
@@ -42,57 +49,51 @@ interviewkit prep --jd jd.txt --company amazon   # also saved to sessions/
 
 ## Writing Experience Notes
 
-Copy `experiences/_template.md` for each job or project and fill it in. Answers
-are only as good as these notes, so cover what you owned, the decisions you made,
-what broke, the tradeoffs, and the numbers. Your filled-in files are git-ignored
-and never leave your machine except as embedding and LLM API calls. Company
-profiles live in `companies/` (Amazon and Microsoft included).
+Copy `experiences/_template.md` for each job or project and fill it in: what you
+owned, decisions, what broke, tradeoffs, and numbers. Your files are git-ignored
+and leave your machine only as embedding and LLM API calls. Company profiles
+live in `companies/` (Amazon and Microsoft included).
 
 ## Measuring Quality
 
-`interviewkit eval` runs a golden set of questions through retrieval and answer
-drafting, then prints a scorecard. Every metric is checked in code, with no
-LLM grading another LLM:
+`interviewkit eval` scores, in code: **recall@k** (was the expected story
+retrieved?), **groundedness** (were cited chunks really retrieved?), **metric
+fidelity** (is every number in a cited chunk?), **refusal accuracy**, latency,
+and cost. Put your golden set in the git-ignored `evals/golden.jsonl` (format:
+`evals/golden.example.jsonl`). On 40 cases:
 
-- **Recall@k**: was the expected story retrieved?
-- **Groundedness**: were all cited sources actually retrieved?
-- **Metric fidelity**: does every number in the answer appear in a cited chunk?
-- **Refusal accuracy**: did it refuse exactly when there was no matching story?
+| Setup | Recall@5 | Unsupported numbers | False refusals | Cost/run |
+|---|---|---|---|---|
+| Meaning-only search | 56% | 0 | 1 | $0.18 |
+| Two searches + grounding check (default) | 73% | 0 | 0 | $0.28 |
+| Agent (`--selection agent`) | 74% | 0 | 0 | $0.73 |
 
-It also reports latency and cost. Put your golden set in the git-ignored
-`evals/golden.jsonl` (format: `evals/golden.example.jsonl`). On 40 cases, the
-two-search approach lifted story-level recall@5 from 56% to 73% over meaning-only
-search, with 0 unsupported numbers (`resources/quality-results.md`).
+The agent's extra point isn't worth 2.6x the cost, so it's opt-in ([details](resources/quality-results.md)).
 
 ## Tracing (optional)
 
 `docker compose --profile tracing up -d` starts a self-hosted
-[Langfuse](https://langfuse.com) for inspecting every step, prompt, and token
-cost. Set any `pk-lf-...` / `sk-lf-...` pair as `LANGFUSE_PUBLIC_KEY` /
-`LANGFUSE_SECRET_KEY` in `.env` and open <http://localhost:3000> (change
-`LANGFUSE_PORT` and `LANGFUSE_HOST` if it's taken). Tracing is off without keys,
-and it's self-hosted because traces contain your private notes.
+[Langfuse](https://langfuse.com) to inspect every step, prompt, and token cost.
+Set any `pk-lf-...` / `sk-lf-...` pair as `LANGFUSE_PUBLIC_KEY` /
+`LANGFUSE_SECRET_KEY` in `.env` and open <http://localhost:3000>. Tracing is off
+without keys, and self-hosted because traces contain your private notes.
 
 ## MCP Server
 
 `interviewkit serve-mcp` exposes `init_database`, `ingest_experiences`, and
-`search_experiences` to MCP clients like Claude Code:
+`search_experiences` to MCP clients (`--project-dir` is required):
 
 ```bash
 claude mcp add interviewkit -- /abs/path/.venv/bin/python -m interviewkit \
   serve-mcp --project-dir /abs/path/to/interviewKit
 ```
 
-`--project-dir` is required because MCP clients start servers from anywhere.
-
 ## Stack
 
-Python 3.11+, Typer, LangChain, LangGraph, OpenAI (GPT-4o, `text-embedding-3-small`;
-optional Claude adapter), PostgreSQL 15 + pgvector, Langfuse (self-hosted tracing),
-MCP, Pydantic Settings, pytest, Docker Compose.
+Python 3.11+, Typer, LangChain, LangGraph, OpenAI (GPT-4o, `text-embedding-3-small`),
+PostgreSQL 15 + pgvector, Langfuse, MCP, Pydantic Settings, pytest, Docker Compose.
 
 ## What's Next
 
-A bounded agent that picks stories while avoiding ones you've already used, and
-a code-level check that every cited chunk and number is real. Each change is
-measured against the golden set.
+MCP tools for reading single stories and usage history, plus a `prep_answer`
+tool that returns a grounded answer with its check status.

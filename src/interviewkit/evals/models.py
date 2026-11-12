@@ -19,6 +19,8 @@ class CaseResult:
     output_tokens: int = 0
     cached_input_tokens: int = 0
     cost_usd: float = 0.0
+    grounding: str | None = None  # pass, flag, or refuse from the grounding check
+    tool_calls: int = 0
     error: str | None = None
 
     @property
@@ -34,6 +36,7 @@ class Scorecard:
     mode: str
     k: int
     cases: tuple[CaseResult, ...]
+    selection: str = "pipeline"
 
     @property
     def completed(self) -> tuple[CaseResult, ...]:
@@ -70,6 +73,16 @@ class Scorecard:
     def false_refusals(self) -> int:
         """Cases that refused although a story should have been found."""
         return sum(1 for c in self.completed if c.refused and not c.expect_refusal)
+
+    @property
+    def flagged(self) -> int:
+        """Answers the grounding check kept but flagged."""
+        return sum(1 for c in self.completed if c.grounding == "flag")
+
+    @property
+    def mean_tool_calls(self) -> float | None:
+        """Mean agent tool calls per completed case."""
+        return _mean([float(c.tool_calls) for c in self.completed])
 
     @property
     def total_cost_usd(self) -> float:

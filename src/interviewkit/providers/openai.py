@@ -1,11 +1,18 @@
 """OpenAI chat provider."""
 
+import json
 from typing import Any, cast
 
 from openai import AsyncOpenAI
 
 from interviewkit.config import Settings, get_settings
-from interviewkit.providers.base import Message, ProviderAPIError, ProviderResponse, Tool
+from interviewkit.providers.base import (
+    Message,
+    ProviderAPIError,
+    ProviderResponse,
+    Tool,
+    ToolCall,
+)
 
 OPENAI_CHAT_MODEL = "gpt-4o"
 
@@ -53,7 +60,8 @@ class OpenAIProvider:
         except Exception as exc:
             raise ProviderAPIError("OpenAI API call failed") from exc
 
-        content = response.choices[0].message.content or ""
+        message = response.choices[0].message
+        content = message.content or ""
         usage = getattr(response, "usage", None)
         return ProviderResponse(
             content=content,
@@ -65,4 +73,19 @@ class OpenAIProvider:
                 getattr(usage, "prompt_tokens_details", None), "cached_tokens", 0
             )
             or 0,
+            tool_calls=_tool_calls(message),
         )
+
+
+def _tool_calls(message: Any) -> tuple[ToolCall, ...]:
+    """Normalize OpenAI function tool calls; unparsable arguments become {}."""
+    calls = []
+    for call in getattr(message, "tool_calls", None) or ():
+        try:
+            arguments = json.loads(call.function.arguments or "{}")
+        except json.JSONDecodeError:
+            arguments = {}
+        if not isinstance(arguments, dict):
+            arguments = {}
+        calls.append(ToolCall(id=call.id, name=call.function.name, arguments=arguments))
+    return tuple(calls)

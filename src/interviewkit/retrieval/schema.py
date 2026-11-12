@@ -35,6 +35,22 @@ CREATE_EXPERIENCES_TSV_INDEX_SQL = """
 CREATE INDEX IF NOT EXISTS idx_experiences_tsv ON experiences USING GIN (chunk_tsv)
 """
 
+# Which story was told to which company, so the agent can avoid repeats.
+CREATE_STORY_USES_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS story_uses (
+    id BIGSERIAL PRIMARY KEY,
+    company TEXT NOT NULL,
+    story_id TEXT NOT NULL,
+    question TEXT,
+    used_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)
+"""
+
+CREATE_STORY_USES_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_story_uses_company_used_at
+ON story_uses(company, used_at DESC)
+"""
+
 SCHEMA_STATEMENTS = (
     CREATE_VECTOR_EXTENSION_SQL,
     CREATE_EXPERIENCES_TABLE_SQL,
@@ -42,6 +58,8 @@ SCHEMA_STATEMENTS = (
     CREATE_EXPERIENCES_SOURCE_INDEX_SQL,
     ADD_EXPERIENCES_TSV_COLUMN_SQL,
     CREATE_EXPERIENCES_TSV_INDEX_SQL,
+    CREATE_STORY_USES_TABLE_SQL,
+    CREATE_STORY_USES_INDEX_SQL,
 )
 
 UPSERT_CHUNK_SQL = """
@@ -59,7 +77,7 @@ DELETE FROM experiences WHERE NOT (id = ANY(%s))
 """
 
 SIMILARITY_SEARCH_SQL = """
-SELECT source_file, chunk_text, chunk_meta, 1 - (embedding <=> %s::vector) AS similarity
+SELECT source_file, chunk_text, chunk_meta, 1 - (embedding <=> %s::vector) AS similarity, id
 FROM experiences
 WHERE chunk_meta @> %s::jsonb
 ORDER BY (embedding <=> %s::vector) + 0
@@ -72,9 +90,35 @@ KEYWORD_SEARCH_SQL = """
 WITH q AS (
     SELECT replace(plainto_tsquery('english', %s)::text, ' & ', ' | ')::tsquery AS query
 )
-SELECT source_file, chunk_text, chunk_meta, ts_rank_cd(chunk_tsv, q.query) AS score
+SELECT source_file, chunk_text, chunk_meta, ts_rank_cd(chunk_tsv, q.query) AS score, id
 FROM experiences, q
 WHERE chunk_tsv @@ q.query AND chunk_meta @> %s::jsonb
 ORDER BY score DESC, id
 LIMIT %s
+"""
+
+INSERT_STORY_USE_SQL = """
+INSERT INTO story_uses (company, story_id, question) VALUES (%s, %s, %s)
+"""
+
+# A NULL company lists uses across all companies.
+LIST_STORY_USES_SQL = """
+SELECT company, story_id, question, used_at
+FROM story_uses
+WHERE (%s::text IS NULL OR company = %s)
+ORDER BY used_at DESC, id DESC
+LIMIT %s
+"""
+
+STORY_USE_EXISTS_SQL = """
+SELECT EXISTS (SELECT 1 FROM story_uses WHERE company = %s AND story_id = %s)
+"""
+
+# Chunk ids are `<file>:<index>:<hash>`, so for one file a shorter id has a
+# smaller index; sorting by length first keeps chunk 2 before chunk 10.
+GET_STORY_SQL = """
+SELECT source_file, chunk_text, chunk_meta, 1.0 AS score, id
+FROM experiences
+WHERE chunk_meta->>'story_id' = %s
+ORDER BY length(id), id
 """
