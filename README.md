@@ -8,10 +8,36 @@ them in pgvector, generates the questions a company is likely to ask, and drafts
 STAR answers that cite the notes they came from. If your notes don't cover a
 question, it says so instead of inventing a story.
 
-```text
-experiences/*.md -> chunk -> embed (OpenAI) -> pgvector
-job description + company profile -> questions -> retrieve -> cited STAR answer
+## How It Works
+
+```mermaid
+flowchart TD
+    subgraph ingest ["1. interviewkit ingest"]
+        A["experiences/*.md<br/>your private notes"] --> B["Split by # / ## / ###<br/>one chunk per story + story_id"]
+        B --> C["Embed with OpenAI<br/>text-embedding-3-small"]
+        C --> D[("Postgres<br/>pgvector + full-text index")]
+    end
+
+    subgraph prep ["2. interviewkit prep"]
+        E["Job description +<br/>companies/amazon.md"] --> F["Generate 5-8 questions<br/>GPT-4o, tagged by principle"]
+        F --> G["For each question:<br/>hybrid search, top 5 chunks"]
+        G --> H{"GPT-4o: do these chunks<br/>support an answer?"}
+        H -- yes --> I["STAR answer<br/>citing source files"]
+        H -- no --> J["Refusal:<br/>no matching experience"]
+        I --> K["Terminal + sessions/*.md"]
+        J --> K
+    end
+
+    D -. "vector similarity + keyword match,<br/>merged by rank fusion" .-> G
 ```
+
+1. **Ingest** turns each story in your notes into a chunk, keeps its headings
+   in the text, and stores it with both an embedding and a full-text index.
+2. **Prep** asks GPT-4o for the questions a company would ask, finds the best
+   five chunks per question by combining meaning-based and keyword search, and
+   drafts an answer only from those chunks, or refuses if none fit.
+3. **Eval** (`interviewkit eval`) runs a golden set through step 2 and scores
+   it, so every change to retrieval or prompts is measured.
 
 ## Quickstart
 
