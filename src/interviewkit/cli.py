@@ -15,6 +15,7 @@ from interviewkit.evals.runner import run_eval
 from interviewkit.ingest.pipeline import ingest_experiences
 from interviewkit.mcp_server.server import Transport, run_server
 from interviewkit.retrieval.vectorstore import init_db
+from interviewkit.stories.usage import list_uses, log_use
 
 app = typer.Typer(
     help="Prepare company-specific behavioral interviews from your experience notes.",
@@ -125,10 +126,22 @@ def serve_mcp(
 @app.command()
 def log(
     company: str = typer.Option(..., "--company", help="Company name."),
-    story: str = typer.Option(..., "--story", help="Story identifier used in an interview."),
+    story: str | None = typer.Option(None, "--story", help="Story ID to log."),
+    question: str | None = typer.Option(None, "--question", help="Question it answered."),
+    show: bool = typer.Option(False, "--list", help="List past uses instead of logging."),
 ) -> None:
-    """Record that a story was used for an interview."""
-    typer.echo(f"Story logging is not implemented yet: company={company}, story={story}")
+    """Record that a story was used with a company, or list past uses."""
+    if show:
+        for use in list_uses(company):
+            typer.echo(f"{use.used_at:%Y-%m-%d}  {use.story_id}  {use.question or ''}".rstrip())
+        return
+    if story is None:
+        raise typer.BadParameter("Pass --story, or --list to see past uses.")
+    try:
+        log_use(company, story, question)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo(f"Logged {story} for {company.strip().lower()}.")
 
 
 @app.command()
